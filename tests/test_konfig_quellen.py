@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import tempfile
 import time
 import unittest
 
@@ -39,7 +40,26 @@ aktiv = false
         self.assertEqual((k["schwellen"]["warnung"], k["schwellen"]["stopp"], k["schwellen"]["wochen_reserve"]),
                          (80, 92, 20))
         self.assertEqual(k["fortsetzen"]["max_pro_fenster"], 2)
-        self.assertTrue(k["fortsetzen"]["claude_befehl"].startswith("/"))
+        befehl = k["fortsetzen"]["claude_befehl"]
+        self.assertTrue(os.path.isabs(befehl) or befehl == "claude", befehl)   # CI-Runner ohne Claude Code
+
+    def test_programm_suche(self):
+        tmp = tempfile.mkdtemp(prefix="lw-prog-")
+        try:
+            programm = os.path.join(tmp, "claude")
+            with open(programm, "w") as f:
+                f.write("#!/bin/sh\n")
+            os.chmod(programm, 0o755)
+            self.assertEqual(konfig.finde_programm("~/x/claude", "claude"), os.path.expanduser("~/x/claude"))
+            alt = os.environ.get("PATH", "")
+            os.environ["PATH"] = tmp
+            try:
+                self.assertEqual(konfig.finde_programm("", "claude"), programm)
+                self.assertEqual(konfig.finde_programm("", "gibt-es-nicht-xyz"), "gibt-es-nicht-xyz")
+            finally:
+                os.environ["PATH"] = alt
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def test_ungueltige_schwellen_fallen_auf_standard(self):
         home = TempHome("run")
