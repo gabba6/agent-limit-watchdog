@@ -1,6 +1,76 @@
 # Bedienungsanleitung (Deutsch)
 
-Stand: Version 1.1 (Nachtmodus). Die englische Beschreibung steht in der [README](../README.md).
+Stand: Version 1.2 (Menüleisten-App). Die englische Beschreibung steht in der [README](../README.md).
+
+## Ganz einfach erklärt (hier anfangen)
+
+### Die Idee
+
+Der Wächter passt auf, dass deine Claude- und Codex-Sitzungen nicht mitten in der Arbeit vom Nutzungslimit
+abgewürgt werden. Stell ihn dir wie einen Tankwart vor: Er warnt, bevor der Tank leer ist, lässt dich ordentlich
+rechts ranfahren und fährt nach dem Nachtanken wieder los, aber **nur, wenn du das erlaubt hast**.
+
+### Was er von selbst macht, ohne dass du etwas drückst
+
+Er schaut jede Minute, wie voll dein Limit ist (5-Stunden-Fenster und Woche):
+
+| Füllstand | Was passiert |
+|---|---|
+| unter 80 % | nichts |
+| **80 %** | **Warnung**: Push aufs Handy und Banner am Mac, sonst nichts |
+| **92 %** | **Geordneter Stopp**: Jede Sitzung macht ihren Schritt fertig, sichert den Stand (Übergabedatei, WIP-Commit ohne Push) und hält an. Neue Subagents/Workflows werden verweigert. |
+| **Limit** | Die Sitzungen stehen schon, der Wächter wartet auf den Reset. |
+| **Reset** | Jetzt entscheidet der Nachtmodus, ob es von selbst weitergeht (siehe unten). |
+
+Warnung und Stopp laufen **immer, für alle Sitzungen**. Das musst du nie einschalten.
+
+### Was der Nachtmodus macht
+
+Der Nachtmodus beantwortet nur eine Frage: **Geht es nach dem Reset automatisch weiter?**
+
+- **Ohne Nachtmodus (normal, tagsüber):** Nach dem Reset geht nichts von selbst weiter, auch Claudes eingebautes
+  Weitermachen ist gesperrt. Du bekommst einen Push („… Sitzungen warten auf ‚weiter‘“), gehst in die Sitzung und
+  tippst **„weiter“**. So wird dein frisches Limit nicht ohne dich verbraucht.
+- **Mit Nachtmodus:** Nach dem Reset setzt der Wächter die Sitzungen selbst fort. Vorher liest er den Bildschirm:
+  Menüs oder Kaufoptionen tippt er nie an, dann kommt nur ein Push. Er versucht es höchstens 2-mal pro Sitzung. Der
+  Nachtmodus gilt **bis 08:00** und schaltet sich dann **von selbst ab**; um 8 Uhr kommt ein Morgenbericht.
+- **Ausnahme Wochenreserve:** Ab 80 % Wochenverbrauch geht es auch im Nachtmodus nicht automatisch weiter, damit
+  für den Rest der Woche etwas übrig bleibt.
+
+### So benutzt du es im Alltag
+
+- **Tagsüber:** nichts tun. Kommt ein Stopp, tippst du nach dem Reset in der Sitzung „weiter“.
+- **Abends, wenn nachts etwas weiterlaufen soll:** Nachtmodus einschalten, und zwar entweder
+  - in der Menüleiste aufs Ring-Symbol klicken → Schalter **Nachtmodus** (alle Sitzungen) oder den **Mond** neben
+    einer Sitzung (nur diese),
+  - in der Claude-Sitzung `#nacht` tippen (geht auch per Remote Control, kostet keine Nutzung),
+  - oder `./waechter.py nacht an`.
+  Den Mac am Netzteil lassen. Würde er nachts einschlafen, warnt dich der Wächter.
+- **Morgens:** nichts ausschalten, das passiert um 8 Uhr allein. Kurz den Bericht ansehen.
+- **Wenn er dich gerade stört:** Pause (in der App oder `./waechter.py pause 2h`). Dann greift er nirgends ein.
+
+### Wo er wirkt und wo nicht
+
+Der Wächter steuert **nur Sitzungen, die in einem Orca-Terminal laufen**. Nur dort kann er den Bildschirm lesen,
+etwas eintippen und die Sitzung einer Session-ID zuordnen.
+
+| Wo du arbeitest | Warnung/Anzeige | Geordneter Stopp | Fortsetzen nach dem Reset |
+|---|---|---|---|
+| **Claude Code im Orca-Terminal** | ✅ | ✅ | ✅ (mit Nachtmodus) |
+| **Codex im Orca-Terminal** | ✅ | ✅ | ✅ (mit Nachtmodus) |
+| Claude Code im normalen Terminal (Terminal.app, iTerm, VS Code …) | ✅ zählt mit | ❌ | ❌ vom Wächter nicht; Claudes eigenes Weitermachen bleibt dort ungebremst an |
+| Codex im normalen Terminal | ✅ zählt mit | ❌ | ❌ Codex bleibt am Limit einfach stehen |
+| Claude-Desktop-App, claude.ai, ChatGPT-/Codex-App | ✅ zählt mit | ❌ | ❌ |
+
+Was heißt „zählt mit“? Alles läuft über **dasselbe Konto-Limit**. Arbeitest du in der Desktop-App, steigt der
+Füllstand genauso, und du bekommst auch die Warnung. Gestoppt und fortgesetzt werden aber **nur** die
+Orca-Sitzungen. Auch `#nacht` wirkt nur in Orca; woanders geht der Text einfach als normale Nachricht ans Modell.
+
+Zwei Folgen:
+
+- **Füllstand nur mit laufendem Orca:** Die Prozentwerte liest der Wächter aus Orca. Ist Orca geschlossen, sieht er
+  den Claude-Füllstand nicht und kann nicht rechtzeitig warnen.
+- **Faustregel:** Alles, was nachts oder unbeaufsichtigt laufen soll, startest du in **Orca**.
 
 ## Was der Wächter macht, in drei Sätzen
 
