@@ -194,6 +194,10 @@ class AppSelbsttestTest(unittest.TestCase):
         self.assertIn(d["statusline"]["zustand"], ("aktiv", "zurueckgeschrieben", "aus"))
         if not os.path.exists(self.APP):
             self.skipTest("App nicht gebaut (app/build.sh)")
+        v = subprocess.run([self.APP, "--version"], capture_output=True, text=True, timeout=30).stdout.split()
+        if not v or v[-1] != VERSION:
+            # install.sh app testet vor dem Bauen: eine ältere Build darf das nicht blockieren
+            self.skipTest("App-Build ist veraltet (app/build.sh)")
         r = subprocess.run([self.APP, "--selbsttest", os.path.join(os.path.dirname(self.APP), "..", "..", "..", "..",
                                                                     "..", "tests", "fixtures", "app", "status.json")],
                            capture_output=True, text=True, timeout=30)
