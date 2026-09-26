@@ -2,7 +2,9 @@
 """Claude-Code-Hook des Limit-Wächters (zusätzlich zu Orcas Hooks in ~/.claude/settings.json).
 
 Ereignisse:
-  SessionStart / UserPromptSubmit  Sitzung <-> Orca-Terminal registrieren; Reserve-Sperre der eingebauten Fortsetzung
+  SessionStart / UserPromptSubmit  Sitzung <-> Orca-Terminal registrieren; Reserve-Sperre der eingebauten Fortsetzung;
+                                    '#nacht' schaltet den Nachtmodus (block, geht nicht ans Modell); ohne Nachtmodus
+                                    wird Claudes eingebaute Fortsetzung gesperrt (v1.1, [fortsetzen] nur_mit_nachtmodus)
   PreToolUse (Agent|Task|Workflow)  im STOPP/LIMIT: deny (keine neuen Subagents/Workflows)
   PostToolUse                       im STOPP einmal je Sitzung und Fenster: additionalContext
   Stop                              im STOPP einmal: decision=block mit Sicherungsauftrag, danach gestoppt
@@ -20,7 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lw import phasen, quellen, register, sprache, texte, util  # noqa: E402
+from lw import nacht, phasen, quellen, register, sprache, texte, util  # noqa: E402
 from lw.sprache import t  # noqa: E402
 
 GESPERRTE_WERKZEUGE = {"Agent", "Task", "Workflow"}
@@ -111,6 +113,23 @@ def verarbeiten(payload, env, now):
         prompt = payload.get("prompt") or payload.get("user_prompt") or ""
         ausgabe = {}
 
+        befehl = nacht.befehl(prompt)                # '#nacht …': unabhängig von Pause/Zustand/Phase
+        if befehl:
+            uhr = cur.get("nacht_ende") or nacht.STANDARD_UHRZEIT
+            wort, alle = befehl
+            if wort == "aus":
+                nacht.sitzung_aus("claude", sid, now, aenderung=basis)
+                gb = nacht.global_bis(now)
+                if gb:
+                    return {"decision": "block", "reason": texte.nacht_antwort("aus_global", gb, now)}
+                return {"decision": "block", "reason": texte.nacht_antwort("aus", bezug=now)}
+            if alle:
+                register.aktualisieren("claude", sid, basis)
+                b = nacht.alle_an(now, uhr)
+            else:
+                b = nacht.sitzung_an("claude", sid, now, uhr, aenderung=basis)
+            return {"decision": "block", "reason": texte.nacht_antwort("alle" if alle else "an", b, now)}
+
         if prompt.startswith(texte.EINGEBAUT_PRAEFIX):
             aktuell = grund in ("aktuell", "abgelaufen")
             c = cur.get("claude") or {}
@@ -121,6 +140,15 @@ def verarbeiten(payload, env, now):
                 register.aktualisieren("claude", sid, reserve, "eingebaute Fortsetzung wegen Reserve gesperrt")
                 util.ereignis("reserve_gesperrt", anbieter="claude", sitzung=sid, cwd=payload.get("cwd"))
                 return {"decision": "block", "reason": texte.reserve_block(c, now)}
+            if aktuell and cur.get("nur_nacht") and not nacht.aktiv(register.lesen("claude", sid), now):
+                def gesperrt(d):
+                    basis(d)
+                    if d.get("status") != "wartet_auf_weiter":   # schon gemeldet: kein zweiter Push
+                        d["weiter_gemeldet"] = False
+                    d["status"] = "wartet_auf_weiter"
+                register.aktualisieren("claude", sid, gesperrt, "eingebaute Fortsetzung gesperrt (kein Nachtmodus)")
+                util.ereignis("eingebaut_gesperrt", anbieter="claude", sitzung=sid, cwd=payload.get("cwd"))
+                return {"decision": "block", "reason": texte.weiter_block(now)}
             neu, notiz = "eingebaut_fortgesetzt", "eingebaute Fortsetzung"
             util.ereignis("eingebaut", anbieter="claude", sitzung=sid, cwd=payload.get("cwd"),
                           weg="eingebaute Fortsetzung")
@@ -164,7 +192,8 @@ def verarbeiten(payload, env, now):
         register.aktualisieren("claude", sid, stop)
         if ergebnis.get("block"):
             util.log(t("log_hook_block", sid=sid[:8]))
-            return {"decision": "block", "reason": texte.sicherungsauftrag(p, now)}
+            automatisch = not cur.get("nur_nacht") or nacht.aktiv(register.lesen("claude", sid), now)
+            return {"decision": "block", "reason": texte.sicherungsauftrag(p, now, automatisch)}
         return None
 
     if ev == "StopFailure":
@@ -202,6 +231,8 @@ def verarbeiten(payload, env, now):
         if neu:
             def quota(d):
                 basis(d)
+                if neu == "eingebaut_fortgesetzt" and d.get("status") == "wartet_auf_weiter":
+                    return                                   # schon gesperrt (UserPromptSubmit kam zuerst)
                 d["status"] = neu
                 if neu in ("stale", "disabled"):
                     r = d.get("reset")

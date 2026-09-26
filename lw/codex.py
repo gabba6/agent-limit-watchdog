@@ -8,7 +8,7 @@ könnten nachts eine Abfrage auslösen). Zuordnung Terminal -> Thread über Orca
 import os
 import re
 
-from . import bildschirm, quellen, register, texte, util
+from . import bildschirm, nacht, quellen, register, texte, util
 from .orca import OrcaFehler, pane_key
 from .phasen import fenster_id
 from .sprache import t
@@ -64,8 +64,10 @@ def verwalten(ctx, phase, rollouts):
             d["pane_key"] = pk
             d["worktree"] = term.get("worktreePath")
             d["cwd"] = (info or {}).get("cwd") or d.get("cwd") or term.get("worktreePath")
-            if d.get("status") == "fortgesetzt" and info and not info["laeuft"] and not info["limit"] \
-                    and (info.get("letzte_aktivitaet") or 0) > (d.get("status_seit") or 0):
+            neu = info and (info.get("letzte_aktivitaet") or 0) > (d.get("status_seit") or 0)
+            if d.get("status") == "fortgesetzt" and neu and not info["laeuft"] and not info["limit"]:
+                d["status"] = "aktiv"
+            elif d.get("status") == "wartet_auf_weiter" and neu:     # Nutzer hat selbst weitergemacht
                 d["status"] = "aktiv"
         s = register.aktualisieren("codex", tid, basis)
 
@@ -102,7 +104,9 @@ def _stopp_senden(ctx, s, term, phase):
     if art not in ("beschaeftigt", "bereit"):
         util.log(t("log_codex_nichts", id=s["id"][:8], grund=grund, ausschnitt=bildschirm.ausschnitt(bild["zeilen"])))
         return
-    ergebnis = ctx.orca.senden(term["handle"], text=texte.codex_stopp(phase, ctx.now), enter=True, warten=30)
+    automatisch = not k["fortsetzen"].get("nur_mit_nachtmodus") or nacht.aktiv(s, ctx.now)
+    ergebnis = ctx.orca.senden(term["handle"], text=texte.codex_stopp(phase, ctx.now, automatisch), enter=True,
+                               warten=30)
 
     def markieren(d):
         register.setze_hinweis(d, phase["fenster_id"], "stop")

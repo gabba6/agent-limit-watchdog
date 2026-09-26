@@ -7,7 +7,9 @@ from . import util
 from .sprache import t
 
 REIHENFOLGE = ["limit", "gestoppt", "fortgesetzt", "eingebaut", "blockiert", "haengt", "wartet_auf_freigabe",
-               "freigabe_blockiert", "reserve_gesperrt", "ueberziehung", "meldung"]
+               "freigabe_blockiert", "reserve_gesperrt", "wartet_auf_weiter", "eingebaut_gesperrt", "ueberziehung",
+               "nachtmodus", "meldung"]
+NICHT_RELEVANT = ("meldung", "nachtmodus")
 
 
 def ueberschrift(typ):
@@ -39,7 +41,7 @@ def erstellen(seit, bis):
         liste = gruppen.get(typ) or []
         if not liste:
             continue
-        if typ != "meldung":
+        if typ not in NICHT_RELEVANT:
             relevant += len(liste)
         zeilen.append(f"## {ueberschrift(typ)} ({len(liste)})")
         zeilen.extend(_zeile(e) for e in liste[-40:])
@@ -47,7 +49,7 @@ def erstellen(seit, bis):
     if not relevant:
         zeilen.append(t("bericht_leer"))
     kurz = ", ".join(f"{len(gruppen[typ])}× {ueberschrift(typ).split(' (')[0]}" for typ in REIHENFOLGE
-                     if gruppen.get(typ) and typ != "meldung")
+                     if gruppen.get(typ) and typ not in NICHT_RELEVANT)
     return {"text": "\n".join(zeilen), "relevant": relevant, "kurz": kurz}
 
 

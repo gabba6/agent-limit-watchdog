@@ -17,6 +17,7 @@ MAC_OK = {"netzteil": True, "wach_bei_deckel_zu": True, "schlaf_aus": True}
 class TickTest(TempHome):
     def setUp(self):
         super().setUp()
+        self.k["fortsetzen"]["nur_mit_nachtmodus"] = False     # v1.0-Verhalten; Nachtmodus: test_nacht.py
         self.reset = self.now + 3600
         self.orca = OrcaAttrappe(
             terminals=[{"handle": "term_A", "agentIdentity": "claude", "tabId": "tA", "leafId": "lA",
@@ -243,6 +244,26 @@ class TickTest(TempHome):
         self.assertEqual(s["status"], "gestoppt")
         self.assertEqual(s["fortsetzen_ab"], self.reset + 120)
 
+    def test_codex_stopp_text_je_nach_nachtmodus(self):
+        from lw import nacht
+        self.k["fortsetzen"]["nur_mit_nachtmodus"] = True
+        self._codex_setup()
+        self.lauf(nutzung(10, self.reset, stand=self.now), codex=nutzung(93, self.reset, stand=self.now))
+        an_x = [g for g in self.orca.gesendet if g.get("handle") == "term_X"]
+        self.assertEqual(len(an_x), 1)
+        self.assertIn("„weiter“", an_x[0]["text"])
+        self.assertNotIn("automatisch fort", an_x[0]["text"])
+
+    def test_codex_stopp_text_mit_nachtmodus(self):
+        from lw import nacht
+        self.k["fortsetzen"]["nur_mit_nachtmodus"] = True
+        nacht.alle_an(self.now)
+        self._codex_setup()
+        self.lauf(nutzung(10, self.reset, stand=self.now), codex=nutzung(93, self.reset, stand=self.now))
+        an_x = [g for g in self.orca.gesendet if g.get("handle") == "term_X"]
+        self.assertEqual(len(an_x), 1)
+        self.assertIn("automatisch fort", an_x[0]["text"])
+
     def test_codex_stopp_nicht_bei_menue(self):
         self._codex_setup()
         self.orca.bildschirme["term_X"] = bildschirm("codex_menue.txt")
@@ -315,6 +336,12 @@ class ZyklusTest(TempHome):
         gesendet = [g.get("handle") for g in ende["gesendet"]]
         self.assertNotIn("term_B", gesendet, "Kaufmenü: nie etwas senden")
         self.assertNotIn("term_Z", gesendet, "nur Agent-Terminals")
+        # C ohne Nachtmodus: nichts gesendet, wartet auf "weiter", genau ein Push dazu
+        self.assertEqual(ende["sitzungen"]["session-C"], "wartet_auf_weiter")
+        self.assertNotIn("term_C", gesendet)
+        weiter = [m for e in erg if "meldungen" in e for m in e["meldungen"] if "„weiter“" in m["text"] or '"continue"' in m["text"]]
+        self.assertEqual(len(weiter), 1)
+        self.assertEqual(titel["nacht"]["hook"]["decision"], "block")
 
 
 class MelderTest(TempHome):

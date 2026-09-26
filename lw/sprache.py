@@ -425,4 +425,78 @@ TEXTE = {
                    "en": "Simulated stop phase for session {sid} is active for {minuten} min (this session only)."},
     "sim_scharf_ende": {"de": "Beenden: waechter.py simulate aus", "en": "End it with: waechter.py simulate off"},
     "sim_aus": {"de": "Simulation beendet.", "en": "Simulation ended."},
+
+    # ------------------------------------------------------------ v1.1 Nachtmodus: Tick, CLI, Bericht, Simulation (Umsetzer A)
+    "z_wartet_auf_weiter": {"de": "wartet auf „weiter“", "en": "waiting for \"continue\""},
+    "push_wartet_auf_weiter": {"de": "{n}: Limit zurückgesetzt – {anzahl} Sitzung(en) warten auf „weiter“.",
+                               "en": "{n}: limit has reset – {anzahl} session(s) waiting for you to type \"continue\"."},
+    "b_wartet_auf_weiter": {"de": "Ohne Nachtmodus nicht fortgesetzt (wartet auf „weiter“)",
+                            "en": "Not continued without night mode (waiting for \"continue\")"},
+    "b_eingebaut_gesperrt": {"de": "Eingebaute Fortsetzung gesperrt (kein Nachtmodus)",
+                             "en": "Built-in continuation blocked (no night mode)"},
+    "b_nachtmodus": {"de": "Nachtmodus geschaltet", "en": "Night mode switched"},
+    "h_nacht": {"de": "Nachtmodus: status | an [sitzung|alle] | aus [sitzung|alle]",
+                "en": "Night mode: status | on [session|all] | off [session|all]"},
+    "n_an_alle": {"de": "Nachtmodus an für alle Sitzungen bis {zeit}.", "en": "Night mode on for all sessions until {zeit}."},
+    "n_an": {"de": "Nachtmodus an für {sitzung} bis {zeit}.", "en": "Night mode on for {sitzung} until {zeit}."},
+    "n_aus_alle": {"de": "Nachtmodus aus (global und für alle Sitzungen).",
+                   "en": "Night mode off (global and for all sessions)."},
+    "n_aus": {"de": "Nachtmodus aus für {sitzung}.", "en": "Night mode off for {sitzung}."},
+    "n_global_noch": {"de": "Hinweis: Nachtmodus für alle Sitzungen ist noch an bis {zeit} (aus: nacht aus alle).",
+                      "en": "Note: night mode for all sessions is still on until {zeit} (off: night off all)."},
+    "n_keine": {"de": "Keine Sitzung passt zu „{ziel}“. Bekannte Sitzungen:",
+                "en": "No session matches \"{ziel}\". Known sessions:"},
+    "n_mehrdeutig": {"de": "„{ziel}“ ist mehrdeutig – bitte genauer (ID-Anfang):",
+                     "en": "\"{ziel}\" is ambiguous – please be more specific (ID prefix):"},
+    "n_keine_liste": {"de": "  (keine)", "en": "  (none)"},
+    "n_aktion": {"de": "Unbekannte Aktion „{aktion}“ – erlaubt: status, an, aus.",
+                 "en": "Unknown action \"{aktion}\" – allowed: status, on, off."},
+    "n_global_an": {"de": "Nachtmodus: an für alle Sitzungen bis {zeit}", "en": "Night mode: on for all sessions until {zeit}"},
+    "n_global_aus": {"de": "Nachtmodus für alle: aus", "en": "Night mode for all sessions: off"},
+    "n_schon_wartend": {"de": "{anzahl} Sitzung(en) warten schon auf „weiter“ – der Wächter setzt sie in der "
+                              "nächsten Minute fort (mit Bildschirmprüfung):",
+                        "en": "{anzahl} session(s) already wait for \"continue\" – the watchdog continues them "
+                              "within the next minute (after checking the screen):"},
+    "n_meta_aktion": {"de": "aktion", "en": "action"},
+    "n_hilfe_aktion": {"de": "status | an | aus", "en": "status | on | off"},
+    "n_meta_ziel": {"de": "ziel", "en": "target"},
+    "n_hilfe_ziel": {"de": "alle | ID-Anfang | Projektordner", "en": "all | ID prefix | project folder"},
+    "n_sitzungen": {"de": "Sitzungen im Nachtmodus:", "en": "Sessions in night mode:"},
+    "n_nur_nacht_aus": {"de": "Hinweis: nur_mit_nachtmodus = false – alle Sitzungen werden fortgesetzt.",
+                        "en": "Note: nur_mit_nachtmodus = false – all sessions are continued."},
+    "st_nacht": {"de": " · Nacht bis {zeit}", "en": " · night until {zeit}"},
+    "st_weiter_noetig": {"de": " · nach Reset {zeit} „weiter“ nötig", "en": " · after reset {zeit} type \"continue\""},
+    "sim_hook_nacht": {"de": "  Hook #nacht in A: {wert}", "en": "  Hook #night in A: {wert}"},
+
+    # ------------------------------------------------------------ v1.1 Nachtmodus: Hook und Agententexte (Umsetzer B)
+    "nach_reset_weiter": {"de": " Nach dem Reset setzt {wer} mit „weiter“ fort.",
+                          "en": " After the reset, {wer} will continue by typing \"continue\"."},
+    "weiter_block": {
+        "de": "{app}: Das Limit ist zurückgesetzt. Automatisches Fortsetzen ist für diese Sitzung aus (kein "
+              "Nachtmodus); {wer} setzt mit „weiter“ fort.",
+        "en": "{app}: The limit has reset. Automatic continuation is off for this session (no night mode); {wer} "
+              "will continue by typing \"continue\".",
+    },
+    "nacht_an_hook": {
+        "de": "{app}: Nachtmodus an bis {zeit} – nach einem Limit-Reset setze ich diese Sitzung automatisch fort. "
+              "Aus: #nacht aus",
+        "en": "{app}: Night mode on until {zeit} – after a limit reset I will continue this session automatically. "
+              "Off: #night off",
+    },
+    "nacht_alle_hook": {
+        "de": "{app}: Nachtmodus an für alle Sitzungen bis {zeit} – nach einem Limit-Reset setze ich sie "
+              "automatisch fort. Aus: #nacht aus",
+        "en": "{app}: Night mode on for all sessions until {zeit} – after a limit reset I will continue them "
+              "automatically. Off: #night off",
+    },
+    "nacht_aus_hook": {
+        "de": "{app}: Nachtmodus aus – nach einem Reset wartet diese Sitzung auf „weiter“.",
+        "en": "{app}: Night mode off – after a reset this session waits for you to type \"continue\".",
+    },
+    "nacht_aus_global_hook": {
+        "de": "{app}: Nachtmodus für diese Sitzung aus – für alle Sitzungen ist er aber noch an bis {zeit} "
+              "(aus: waechter.py nacht aus alle).",
+        "en": "{app}: Night mode off for this session – but it is still on for all sessions until {zeit} "
+              "(off: waechter.py night off all).",
+    },
 }

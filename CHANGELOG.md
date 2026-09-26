@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0 – 2026-09-26
+
+Night mode. **Behaviour change:** automatic continuation after the reset is now opt-in per session.
+
+- The warning and the orderly stop still run for all sessions.
+- Only sessions in **night mode** are continued automatically after the reset. All other sessions wait for you
+  to type "continue"; Claude's built-in auto-continue is blocked for them too. You get one push per provider
+  ("limit has reset – n session(s) waiting for you to type \"continue\"").
+- Night mode lasts until the next report time (`[bericht] uhrzeit`, default 08:00) and then switches itself off.
+- Switch it on with `waechter.py night on [session|all]` (German: `nacht an`), or type `#night` / `#nacht` in a
+  Claude session (the hook catches it, nothing goes to the model; works via Remote Control). Codex only via the
+  command. `night off`, `#night off` switch it off; `night` shows the current state. Switched on after the reset,
+  it still picks up sessions that have been waiting for less than 12 hours.
+- `status` shows night mode globally and per session; `status --json` has `nacht` / `nacht_bis`.
+- New session status `wartet_auf_weiter`; morning report lists waiting sessions, blocked built-in continuations
+  and night-mode changes. `caffeinate` and the night warning only run for sessions that will be continued.
+- `[fortsetzen] nur_mit_nachtmodus = false` restores the 1.0 behaviour (continue everything).
+
 ## 1.0.0 – 2026-09-26
 
 First public release.

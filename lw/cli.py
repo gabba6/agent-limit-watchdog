@@ -13,7 +13,7 @@ import sys
 import time
 import traceback
 
-from . import VERSION, bericht, konfig, melden, quellen, register, simulation, sprache, tick, util, wach
+from . import VERSION, bericht, konfig, melden, nacht, quellen, register, simulation, sprache, tick, util, wach
 from .kontext import Kontext
 from .orca import Orca
 from .sprache import t
@@ -57,8 +57,9 @@ def cmd_status(args, k):
     topic = melden.topic_vorhanden(k["melden"]["ntfy_dienst"])
     w = wach.zustand()
     if args.json:
+        liste = [dict(x, nacht_bis=nacht.bis(x, now)) for x in sitzungen]
         print(json.dumps({"phasen": ph, "pausiert": pausiert, "launchagent": geladen, "ntfy_topic": topic,
-                          "orca_ok": daten["orca_ok"], "sitzungen": sitzungen}, ensure_ascii=False, indent=1))
+                          "orca_ok": daten["orca_ok"], "nacht": nacht.global_bis(now), "sitzungen": liste}, ensure_ascii=False, indent=1))
         return 0
     print(t("st_kopf", version=VERSION, zeit=time.strftime("%d.%m. %H:%M", time.localtime(now))))
     letzter = zustand.get("letzter_tick")
@@ -68,6 +69,8 @@ def cmd_status(args, k):
     else:
         pause = t("st_aktiv")
     print(t("st_wachter", pause=pause, lauf=lauf, agent=t("st_geladen") if geladen else t("st_nicht_geladen")))
+    gb = nacht.global_bis(now)
+    print(t("n_global_an", zeit=util.uhrzeit(gb, now)) if gb else t("n_global_aus"))
     if not daten["orca_ok"]:
         print(t("st_orca_weg", fehler="; ".join(daten["fehler"])[:120]))
     for a in ("claude", "codex"):
@@ -87,8 +90,12 @@ def cmd_status(args, k):
         if x.get("status") == "aktiv" and not args.alle:
             continue
         extra = ""
+        nb = nacht.bis(x, now)
         if x.get("status") in register.WARTET and x.get("fortsetzen_ab"):
-            extra = t("st_ab", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
+            automatisch = not k["fortsetzen"]["nur_mit_nachtmodus"] or (nb and nb > x["fortsetzen_ab"])
+            extra = t("st_ab" if automatisch else "st_weiter_noetig", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
+        if nb:
+            extra += t("st_nacht", zeit=util.uhrzeit(nb, now))
         print(f"  {x['anbieter']:6} {str(x['id'])[:8]} {os.path.basename(x.get('cwd') or '?')[:28]:28} "
               f"{zustand_text(x.get('status')):26}{extra}")
     if not any(x.get("status") != "aktiv" for x in frisch) and not args.alle:
@@ -171,6 +178,78 @@ def cmd_pause(args, k):
     return 0
 
 
+def _sitzung_kurz(x):
+    return f"{x['anbieter']} {str(x['id'])[:8]} ({os.path.basename((x.get('cwd') or '').rstrip('/')) or '?'})"
+
+
+def _kandidaten(liste):
+    for x in liste:
+        print("  " + _sitzung_kurz(x))
+    if not liste:
+        print(t("n_keine_liste"))
+
+
+def _hinweis_schon_wartend(liste, k, now):
+    """Sitzungen, die schon auf „weiter“ warten, setzt der nächste Tick fort (tick._nachholen)."""
+    liste = [x for x in liste if nacht.nachholbar(x, now, k["wach"]["max_stunden_voraus"])]
+    if liste:
+        print(t("n_schon_wartend", anzahl=len(liste)))
+        for x in liste:
+            print(f"  {_sitzung_kurz(x)}")
+
+
+def cmd_nacht(args, k):
+    now = util.jetzt()
+    uhrzeit = str(k["bericht"]["uhrzeit"])
+    aktion = (args.aktion or "status").lower()
+    ziel = args.ziel
+    if aktion == "status":
+        gb = nacht.global_bis(now)
+        print(t("n_global_an", zeit=util.uhrzeit(gb, now)) if gb else t("n_global_aus"))
+        eigene = [x for x in register.alle() if x.get("status") != "beendet" and (x.get("nacht_bis") or 0) > now]
+        print(t("n_sitzungen"))
+        for x in eigene:
+            print(f"  {_sitzung_kurz(x)}{t('st_nacht', zeit=util.uhrzeit(x['nacht_bis'], now))}")
+        if not eigene:
+            print(t("n_keine_liste"))
+        if not k["fortsetzen"]["nur_mit_nachtmodus"]:
+            print(t("n_nur_nacht_aus"))
+        return 0
+    if aktion not in nacht.AN + nacht.AUS:
+        print(t("n_aktion", aktion=aktion))
+        return 2
+    an = aktion in nacht.AN
+    if not ziel or ziel.lower() in nacht.ALLE:
+        if an:
+            print(t("n_an_alle", zeit=util.uhrzeit(nacht.alle_an(now, uhrzeit), now)))
+            _hinweis_schon_wartend(register.alle(), k, now)
+        else:
+            nacht.alle_aus(now)
+            for x in register.alle():
+                if x.get("nacht_bis"):
+                    nacht.sitzung_aus(x["anbieter"], x["id"], now)
+            print(t("n_aus_alle"))
+        return 0
+    treffer = nacht.finden(ziel, now)
+    if len(treffer) != 1:
+        print(t("n_mehrdeutig" if treffer else "n_keine", ziel=ziel))
+        _kandidaten(treffer or [x for x in register.alle() if x.get("status") != "beendet"
+                                and now - (x.get("zuletzt") or 0) < 2 * 86400])
+        return 2
+    x = treffer[0]
+    if an:
+        b = nacht.sitzung_an(x["anbieter"], x["id"], now, uhrzeit)
+        print(t("n_an", sitzung=_sitzung_kurz(x), zeit=util.uhrzeit(b, now)))
+        _hinweis_schon_wartend([register.lesen(x["anbieter"], x["id"]) or x], k, now)
+    else:
+        nacht.sitzung_aus(x["anbieter"], x["id"], now)
+        print(t("n_aus", sitzung=_sitzung_kurz(x)))
+        gb = nacht.global_bis(now)
+        if gb:
+            print(t("n_global_noch", zeit=util.uhrzeit(gb, now)))
+    return 0
+
+
 def cmd_report(args, k):
     now = util.jetzt()
     print(bericht.erstellen(now - args.stunden * 3600, now)["text"])
@@ -226,7 +305,7 @@ def _namen(de, en):
 def main(argv=None):
     k = konfig.laden()
     ap = argparse.ArgumentParser(prog="waechter.py", description=t("cli_beschreibung"))
-    liste = ["status", "tick", "simulate", "pause", _namen("weiter", "resume")[0], "report",
+    liste = ["status", "tick", "simulate", "pause", _namen("nacht", "night")[0], _namen("weiter", "resume")[0], "report",
              _namen("ntfy-einrichten", "ntfy-setup")[0], _namen("ntfy-abo", "ntfy-subscribe")[0], "test-push"]
     sub = ap.add_subparsers(dest="befehl", required=True, metavar="{" + ",".join(liste) + "}")
     p = sub.add_parser("status", help=t("h_status"))
@@ -249,6 +328,11 @@ def main(argv=None):
     name, alias = _namen("weiter", "resume")
     p = sub.add_parser(name, aliases=alias, help=t("h_weiter"))
     p.set_defaults(f=lambda a, k: cmd_pause(argparse.Namespace(dauer="aus"), k))
+    name, alias = _namen("nacht", "night")
+    p = sub.add_parser(name, aliases=alias, help=t("h_nacht"))
+    p.add_argument("aktion", nargs="?", metavar=t("n_meta_aktion"), help=t("n_hilfe_aktion"))
+    p.add_argument("ziel", nargs="?", metavar=t("n_meta_ziel"), help=t("n_hilfe_ziel"))
+    p.set_defaults(f=cmd_nacht)
     p = sub.add_parser("report", help=t("h_report"))
     p.add_argument("--stunden", "--hours", dest="stunden", type=float, default=24)
     p.set_defaults(f=cmd_report)

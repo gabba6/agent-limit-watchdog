@@ -27,6 +27,7 @@ STANDARD = {
     },
     "fortsetzen": {
         "aktiv": True,
+        "nur_mit_nachtmodus": True,         # v1.1: nur Sitzungen im Nachtmodus automatisch fortsetzen
         "puffer_minuten": 2,
         "max_pro_fenster": 2,
         "pro_tick": 2,

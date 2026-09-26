@@ -8,18 +8,19 @@
 **Stop hitting usage limits blindly.** Agent Limit Watchdog (originally *Limit-Wächter*) watches the usage
 limits of **Claude Code** and **Codex** running in [Orca](https://github.com/stablyai/orca) terminals on your Mac.
 It warns you before the limit, lets running agents **save their work and pause in an orderly way**, and
-**continues them after the reset** – also at night while you sleep. It never buys credits.
+**continues them after the reset** – for sessions you put in *night mode*, also while you sleep. It never buys credits.
 
 🇩🇪 Deutsche Bedienungsanleitung: [docs/ANLEITUNG.de.md](docs/ANLEITUNG.de.md)
 
 ```
-Limit Watchdog 1.0 · 26.09. 16:22
+Limit Watchdog 1.1 · 26.09. 16:22
 Watchdog: active · last tick 14 s ago · LaunchAgent loaded
 Claude  5h 94% (resets 16:30)     week 57% (resets Sun 03:00) phase STOP     data 12 s old (orca)
 Codex   5h 44% (resets 22:51)     week 38% (resets Fri 12:04) phase OK       data 2 min old (orca)
 Thresholds: warn 80%, stop 92% (5h) · week 80/92% · reserve 20% (no auto-continue above 80% weekly use)
+Night mode: on for all sessions until 08:00
 Sessions (last 2 days, Orca): 4 Claude, 0 Codex
-  claude 7c1e2a9b my-app                       stopped                    · continues from 16:32
+  claude 7c1e2a9b my-app                       stopped                    · continues from 16:32 · night until 08:00
 Mac: on power yes · sleep disabled: yes · awake with lid closed: yes · Amphetamine: yes
 ```
 
@@ -46,10 +47,24 @@ the built-in auto-continue and only steps in where it does not help.
 | **Warning** | 80 % of the 5-hour or weekly window | push notification + macOS banner |
 | **Stop** | 92 % | Claude: new subagents/workflows are denied; at the end of the turn the agent gets **one** checkpoint request (update status/handoff file, WIP commit without push, note workflow run IDs) and pauses. Codex: a short message asks the agent to do the same. |
 | **Limit** | 100 % or a limit error | sessions are remembered with their reset time; the Mac is kept awake (`caffeinate`) |
-| **Reset** | reset time + 2 min | waiting sessions are continued – but only after reading the terminal screen first |
+| **Reset** | reset time + 2 min | sessions in **night mode** are continued – but only after reading the terminal screen first. All others wait for you to type “continue” (one push per provider); Claude's built-in auto-continue is blocked for them |
 | **Weekly reserve** | above 80 % weekly use | no automatic continuation at all (neither by the watchdog nor by Claude's built-in one) |
 
-Continuing a session, in this order:
+### Night mode (since 1.1)
+
+The stop always runs for every session, but **continuing after the reset is opt-in**: only sessions in night mode
+are continued automatically. Night mode lasts until the next report time (default 08:00) and then switches itself off.
+
+| How | |
+|---|---|
+| `./waechter.py night on` | all sessions (also ones started later) until 08:00 |
+| `./waechter.py night on <id-start or project folder>` | one session (`night off …` to switch off, `night` shows the state) |
+| type `#night` in a Claude session | this session (`#night all`, `#night off`); the hook catches it, nothing goes to the model – works via Remote Control too |
+
+Switched on after the reset? Sessions that have been waiting for “continue” for less than 12 hours are picked up within a minute (with the usual screen check). Codex sessions can only be switched via the command. Want the 1.0 behaviour (continue everything)? Set
+`[fortsetzen] nur_mit_nachtmodus = false`.
+
+Continuing a session in night mode, in this order:
 
 1. The terminal is already working (e.g. Claude's built-in auto-continue fired) → do nothing.
 2. The screen shows a **menu, a purchase option or anything unclear** → **send nothing**, notify you.
@@ -163,6 +178,7 @@ is safe.
 | Command | |
 |---|---|
 | `./waechter.py status` | usage, phase, waiting or blocked sessions (`--all` for all sessions) |
+| `./waechter.py night on [session\|all]` / `night off` / `night` | night mode: continue these sessions automatically after the reset (until 08:00) |
 | `./waechter.py pause` / `pause 2h` / `pause off` | pause all interventions (Claude's built-in auto-continue keeps working) |
 | `./waechter.py report` | what happened in the last 24 h |
 | `./waechter.py simulate cycle` | full dry run with sample data: warning → stop → limit → continue → morning report |
@@ -181,6 +197,7 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 |---|---|---|
 | `schwellen.warnung` / `stopp` | 80 / 92 | thresholds for the 5-hour window (`woche_*` for the weekly window) |
 | `schwellen.wochen_reserve` | 20 | no automatic continuation above 100 − 20 = 80 % weekly use |
+| `fortsetzen.nur_mit_nachtmodus` | `true` | only sessions in night mode are continued (and may use Claude's built-in auto-continue); `false` = 1.0 behaviour |
 | `fortsetzen.max_pro_fenster` | 2 | automatic continuations per session and window |
 | `fortsetzen.claude_limit_resume` | `"waechter"` | set to `"orca"` if Orca's own rate-limit watcher continues Claude at the limit |
 | `fortsetzen.claude_modus` | `"auto"` | permission mode for sessions restarted with `--resume` |
@@ -215,9 +232,7 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 
 ## Roadmap
 
-- **v1.1 – night mode:** the orderly stop keeps running for all sessions, but continuing after the reset becomes
-  opt-in per session (“night mode”, until the next morning). Sessions without night mode – including Claude's
-  built-in auto-continue – wait for you to type “continue”.
+- ~~v1.1 – night mode~~ – done, see [Night mode](#night-mode-since-11) and the [changelog](CHANGELOG.md).
 - **v1.2 – menu bar app:** a small SwiftUI menu bar app with usage rings for Claude and Codex, pause switch,
   night mode per session, thresholds and the report. Built locally, no paid signing.
 
@@ -239,6 +254,7 @@ lw/tick.py             one run: data → phases → notifications → actions
 lw/quellen.py          data sources (Orca, Codex rollouts, Claude transcripts, pmset)
 lw/bildschirm.py       screen check before every send
 lw/fortsetzen.py       continuing after the reset
+lw/nacht.py            night mode (per session / all, until the report time)
 lw/codex.py            Codex terminals: thread mapping, limit detection, orderly stop
 lw/sprache.py          all user-facing texts (en/de)
 install.sh             install / update      uninstall.sh   undo

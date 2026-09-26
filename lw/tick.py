@@ -2,7 +2,7 @@
 
 import time
 
-from . import bericht, codex, fortsetzen, phasen, quellen, register, sprache, texte, util, wach
+from . import bericht, codex, fortsetzen, nacht, phasen, quellen, register, sprache, texte, util, wach
 from .sprache import t
 from .orca import OrcaFehler
 
@@ -65,6 +65,8 @@ def current_schreiben(k, ph, pausiert, now):
         "puffer_s": k["fortsetzen"]["puffer_minuten"] * 60,
         "hook_max_alter_s": k["daten"]["hook_zustand_max_alter_minuten"] * 60,
         "reserve_sperre": bool(k["fortsetzen"]["reserve_sperrt_eingebaute_fortsetzung"]),
+        "nur_nacht": bool(k["fortsetzen"]["aktiv"] and k["fortsetzen"]["nur_mit_nachtmodus"]),
+        "nacht_ende": str(k["bericht"]["uhrzeit"]),
         "sprache": k["allgemein"]["sprache"],
         "name": k["allgemein"]["name"],
         "claude": ph["claude"],
@@ -117,21 +119,29 @@ def _meldungen_phasen(ctx, ph, zustand, sitzungen, mac):
         p = ph[anb]
         alt = zustand.get(anb) or {}
         wartend = sum(1 for s in sitzungen if s.get("anbieter") == anb and s.get("status") in register.WARTET)
+        # im Push nur Sitzungen zählen, die wirklich automatisch fortgesetzt werden
+        auto = sum(1 for s in sitzungen if s.get("anbieter") == anb and s.get("status") in register.WARTET
+                   and _wird_fortgesetzt(ctx.k, s, ctx.now))
         if p["phase"] in PRIO and p["fenster_id"]:
             schluessel = f"{p['phase']}:{p['fenster_id']}"
             if not (p["phase"] == "warnung" and p["art"] == "woche" and p["reserve_erreicht"]) \
                     and not ctx.melder.bereits(schluessel):
-                remote = _remote_hinweis(mac) if p["phase"] in ("stopp", "limit") else ""
+                remote = _remote_hinweis(mac) if p["phase"] in ("stopp", "limit") and auto else ""
                 if remote and _nacht(ctx.now):
                     ctx.melder.bereits_markieren(_nacht_schluessel(ctx.now))
-                ctx.melder.senden(texte.push_phase(anb, p, wartend, remote), prio=PRIO[p["phase"]],
+                ctx.melder.senden(texte.push_phase(anb, p, auto, remote), prio=PRIO[p["phase"]],
                                   tags=TAGS[p["phase"]], schluessel=schluessel)
         if p["reserve_erreicht"] and p["resetw"]:
             ctx.melder.senden(t("push_reserve", n=texte.NAME[anb], pctw=sprache.prozent(p["pctw"]),
                                 reset=util.uhrzeit(p["resetw"])), prio=4,
                               tags=["warning"],
                               schluessel=f"reserve:{phasen.fenster_id(anb, 'woche', p['resetw'])}")
+        # auch "wartet auf weiter" zählt: dafür kommt ein eigener Push, kein zusätzliches "Limit zurückgesetzt"
+        # (nur noch nicht gemeldete: alte, nie fortgesetzte Sitzungen dürfen den Reset-Push nicht dauerhaft sperren)
+        weiter = sum(1 for s in sitzungen if s.get("anbieter") == anb and s.get("status") == "wartet_auf_weiter"
+                     and s.get("weiter_gemeldet") is False)
         if alt.get("phase") in ("stopp", "limit") and p["phase"] in ("ok", "warnung") and not wartend \
+                and not weiter \
                 and alt.get("fenster_id") and alt.get("fenster_id") != p.get("fenster_id"):
             ctx.melder.senden(t("push_reset", n=texte.NAME[anb]), prio=2,
                               schluessel=f"reset:{alt['fenster_id']}")
@@ -187,6 +197,61 @@ def _bericht(ctx, zustand):
     zustand["bericht_bis"] = now
 
 
+def _nur_nacht(k):
+    return bool(k["fortsetzen"]["nur_mit_nachtmodus"])
+
+
+def _auf_weiter_setzen(s):
+    """Ohne Nachtmodus: nichts senden, nur vermerken (der Nutzer tippt selbst "weiter")."""
+    def aenderung(d):
+        d["status"] = "wartet_auf_weiter"
+        d["weiter_gemeldet"] = False
+    register.aktualisieren(s["anbieter"], s["id"], aenderung, "ohne Nachtmodus: wartet auf weiter")
+    util.ereignis("wartet_auf_weiter", anbieter=s["anbieter"], sitzung=s["id"], cwd=s.get("cwd"))
+
+
+def _weiter_melden(ctx):
+    """Je Anbieter ein Push für alle noch nicht gemeldeten Sitzungen im Status wartet_auf_weiter.
+    Zurückhalten, solange eine weitere Sitzung desselben Anbieters in den nächsten 3 Minuten fällig wird."""
+    now = ctx.now
+    alle = register.alle()
+    for anb in ("claude", "codex"):
+        offen = [s for s in alle if s.get("anbieter") == anb and s.get("status") == "wartet_auf_weiter"
+                 and s.get("weiter_gemeldet") is False]
+        if not offen:
+            continue
+        if any(s.get("anbieter") == anb and s.get("status") in register.WARTET
+               and now < (s.get("fortsetzen_ab") or 0) <= now + 180 for s in alle):
+            continue
+        ctx.melder.senden(t("push_wartet_auf_weiter", n=texte.NAME[anb], anzahl=len(offen)),
+                          prio=2 if _nacht(now) else 3, tags=["hand"])
+        for s in offen:
+            register.aktualisieren(anb, s["id"], lambda d: d.update(weiter_gemeldet=True))
+
+
+def _nachholen(k, sitzungen, now):
+    """Nachtmodus nach dem Reset eingeschaltet: wartende Sitzungen wieder in die Fortsetzung geben
+    (gleiches Fenster, gleiche Versuchszählung, gleiche Bildschirmprüfung). -> True, wenn etwas geändert wurde."""
+    geaendert = False
+    for s in sitzungen:
+        if nacht.nachholbar(s, now, k["wach"]["max_stunden_voraus"]):
+            def aenderung(d):
+                d["status"] = "gestoppt"
+                d["fortsetzen_ab"] = now
+                d.pop("weiter_gemeldet", None)
+            register.aktualisieren(s["anbieter"], s["id"], aenderung, "Nachtmodus nachträglich an")
+            geaendert = True
+    return geaendert
+
+
+def _wird_fortgesetzt(k, s, now):
+    """Würde diese wartende Sitzung beim Reset automatisch fortgesetzt (für Wachhalten/Remote-Hinweis)?"""
+    if not _nur_nacht(k):
+        return True
+    b = nacht.bis(s, now)
+    return bool(b and b > (s.get("fortsetzen_ab") or 0))
+
+
 def ausfuehren(ctx, sim=None, mac_sim=None):
     """Kern eines Ticks. sim: vorgegebene Nutzungsdaten (Simulation/Tests)."""
     k, now = ctx.k, ctx.now
@@ -206,6 +271,8 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
         if daten["orca_ok"]:
             codex.verwalten(ctx, ph["codex"], daten.get("rollouts") or [])
         sitzungen = register.alle()
+        if k["fortsetzen"]["aktiv"] and _nachholen(k, sitzungen, now):
+            sitzungen = register.alle()
         ph = phasen_berechnen(k, daten, sitzungen, now)   # Codex-Limits aus rollouts einbeziehen
         current_schreiben(k, ph, pausiert, now)
     _meldungen_phasen(ctx, ph, zustand, sitzungen, mac)
@@ -219,6 +286,11 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
         if k["fortsetzen"]["aktiv"]:
             faellige = []
             for s in sorted(wartend, key=lambda s: s.get("fortsetzen_ab") or 0):
+                if _nur_nacht(k) and s["fortsetzen_ab"] <= now \
+                        and ph[s["anbieter"]]["phase"] not in ("stopp", "limit") and not nacht.aktiv(s, now) \
+                        and not (ph[s["anbieter"]].get("reserve_erreicht") or s.get("reserve_bei_halt")):
+                    _auf_weiter_setzen(s)
+                    continue
                 ok, grund = fortsetzen.faellig(s, ph[s["anbieter"]], k, now)
                 if ok:
                     faellige.append(s)
@@ -232,13 +304,15 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
             for anb, n in ergebnisse.items():
                 ctx.melder.senden(t("push_fortgesetzt", n=texte.NAME[anb], anzahl=n), prio=2 if _nacht(now) else 3,
                                   tags=["arrow_forward"])
+            _weiter_melden(ctx)
             for s in register.alle():
                 if s.get("status") == "fortgesetzt" and s.get("geprueft") is False \
                         and (s.get("pruefen_ab") or now + 1) <= now:
                     fortsetzen.pruefen(ctx, s)
 
         # Wachhalten und Remote-Modus nur, solange eine Fortsetzung ansteht
-        wartend = [s for s in register.alle() if s.get("status") in register.WARTET and s.get("fortsetzen_ab")]
+        wartend = [s for s in register.alle() if s.get("status") in register.WARTET and s.get("fortsetzen_ab")
+                   and _wird_fortgesetzt(k, s, now)]
         grenze = now + k["wach"]["max_stunden_voraus"] * 3600
         naechste = [max(s["fortsetzen_ab"], now) for s in wartend if s["fortsetzen_ab"] <= grenze]
         if naechste:

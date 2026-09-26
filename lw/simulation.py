@@ -15,7 +15,7 @@ import shutil
 import tempfile
 import time
 
-from . import konfig, melden, register, sprache, tick, util
+from . import konfig, melden, nacht, register, sprache, tick, util
 from .sprache import t
 from .attrappe import OrcaAttrappe
 from .kontext import Kontext
@@ -164,13 +164,16 @@ def zyklus(ausgabe=True):
         terminals = [
             {"handle": "term_A", "agentIdentity": "claude", "tabId": "tabA", "leafId": "leafA", "worktreePath": projekt},
             {"handle": "term_B", "agentIdentity": "claude", "tabId": "tabB", "leafId": "leafB", "worktreePath": projekt},
+            {"handle": "term_C", "agentIdentity": "claude", "tabId": "tabC", "leafId": "leafC", "worktreePath": projekt},
             {"handle": "term_X", "agentIdentity": "codex", "tabId": "tabX", "leafId": "leafX", "worktreePath": projekt},
             {"handle": "term_Z", "agentIdentity": None, "tabId": "tabZ", "leafId": "leafZ", "worktreePath": projekt},
         ]
         orca = OrcaAttrappe(terminals=terminals,
                             agenten={"tabA:leafA": {"state": "working"}, "tabB:leafB": {"state": "working"},
+                                     "tabC:leafC": {"state": "working"},
                                      "tabX:leafX": {"state": "working"}},
                             bildschirme={"term_A": CLAUDE_ARBEITET, "term_B": CLAUDE_ARBEITET,
+                                         "term_C": CLAUDE_ARBEITET,
                                          "term_X": CODEX_BEREIT})
         hook = hook_modul()
         mac = {"netzteil": True, "wach_bei_deckel_zu": False, "schlaf_aus": False}
@@ -204,7 +207,16 @@ def zyklus(ausgabe=True):
         os.environ["LIMIT_WAECHTER_NOW"] = str(start)
         hook_ruf("session-A", "term_A", "tabA:leafA", "SessionStart", source="startup")
         hook_ruf("session-B", "term_B", "tabB:leafB", "SessionStart", source="startup")
+        hook_ruf("session-C", "term_C", "tabC:leafC", "SessionStart", source="startup")
+        # Nachtmodus: A per "#nacht" (Hook, kein Modellaufruf), B und der Codex-Thread per Befehl; C ohne
+        nacht_erg = hook_ruf("session-A", "term_A", "tabA:leafA", "UserPromptSubmit", prompt="#nacht")
+        ergebnisse.append({"schritt": "nacht", "hook": nacht_erg})
+        if ausgabe:
+            print(t("sim_hook_nacht", wert=(nacht_erg or {}).get("decision") or "-"))
         schritt("s1", start, 50, 40)
+        uhr = str(k["bericht"]["uhrzeit"])
+        nacht.sitzung_an("claude", "session-B", start, uhr)
+        nacht.sitzung_an("codex", tid, start, uhr)
         # 2. Warnung
         schritt("s2", start + 600, 82, 60)
         # 3. Stopp: Claude-Hooks greifen, Codex bekommt die Steuernachricht
@@ -214,6 +226,8 @@ def zyklus(ausgabe=True):
         post = hook_ruf("session-A", "term_A", "tabA:leafA", "PostToolUse", tool_name="Bash")
         block = hook_ruf("session-A", "term_A", "tabA:leafA", "Stop", stop_hook_active=False)
         frei = hook_ruf("session-A", "term_A", "tabA:leafA", "Stop", stop_hook_active=True)
+        hook_ruf("session-C", "term_C", "tabC:leafC", "Stop", stop_hook_active=False)
+        hook_ruf("session-C", "term_C", "tabC:leafC", "Stop", stop_hook_active=True)
         hooks_erg = {"deny": deny, "post": post, "block": block, "frei": frei}
         ergebnisse.append({"schritt": "hooks", "hooks": hooks_erg})
         if ausgabe:
@@ -222,6 +236,8 @@ def zyklus(ausgabe=True):
             print(t("sim_hook_stop", eins=(block or {}).get("decision"), zwei=frei or t("sim_frei")))
         orca.bildschirme["term_A"] = CLAUDE_BEREIT
         orca._agenten["tabA:leafA"] = {"state": "done"}
+        orca.bildschirme["term_C"] = CLAUDE_BEREIT
+        orca._agenten["tabC:leafC"] = {"state": "done"}
         # 4. Limit: Sitzung B scheitert am Limit (StopFailure) und zeigt das Kaufmenü
         zeit = start + 1800
         os.environ["LIMIT_WAECHTER_NOW"] = str(zeit)
@@ -239,7 +255,8 @@ def zyklus(ausgabe=True):
         orca.bildschirme["term_X"] = CODEX_BEREIT
         orca._agenten["tabX:leafX"] = {"state": "done"}
         schritt("s4", zeit, 100, 97)
-        # 5. Nachts: Reset + 3 min -> A und Codex fortsetzen, B wartet auf Claudes eingebaute Fortsetzung
+        # 5. Nachts: Reset + 3 min -> A und Codex (Nachtmodus) fortsetzen, B wartet auf Claudes eingebaute
+        #    Fortsetzung, C (kein Nachtmodus) bekommt nichts gesendet -> wartet auf "weiter", ein Push
         neues_fenster = reset + 5 * 3600
         schritt("s5", reset + 180, 0, 0, fenster_reset=neues_fenster)
         orca.bildschirme["term_A"] = CLAUDE_ARBEITET

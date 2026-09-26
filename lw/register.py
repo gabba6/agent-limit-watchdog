@@ -10,6 +10,7 @@ Status einer Sitzung:
   stale                  Mac hat geschlafen, Claude wartet auf Enter
   disabled               eingebautes Warten ohne Fortsetzung beendet -> Wächter übernimmt
   fortgesetzt            Wächter hat fortgesetzt (Prompt gesendet / neu gestartet)
+  wartet_auf_weiter      Reset erreicht, aber kein Nachtmodus -> nichts gesendet, Nutzer tippt "weiter"
   blockiert              Bildschirm unklar oder Kaufoption sichtbar -> nichts gesendet, Push
   reserve                Wochenreserve erreicht -> keine automatische Fortsetzung
   aufgegeben             zu viele Versuche in diesem Fenster

@@ -28,17 +28,20 @@ def stand(p, bezug=None):
              reset=util.uhrzeit(p.get("reset"), bezug))
 
 
-def _danach(p):
-    return t("ohne_fortsetzung", wer=sprache.wer()) if p.get("reserve_erreicht") else t("nach_reset")
+def _danach(p, automatisch=True):
+    """automatisch=False: ohne Nachtmodus setzt nach dem Reset niemand von selbst fort (v1.1)."""
+    if p.get("reserve_erreicht"):
+        return t("ohne_fortsetzung", wer=sprache.wer())
+    return t("nach_reset") if automatisch else t("nach_reset_weiter", wer=sprache.wer())
 
 
 def _herkunft():
     return t("hook_herkunft_name", name=sprache.NUTZER) if sprache.NUTZER else t("hook_herkunft")
 
 
-def sicherungsauftrag(p, bezug=None):
+def sicherungsauftrag(p, bezug=None, automatisch=True):
     return (t("sicherung_kopf", app=t("app"), herkunft=_herkunft(), stand=stand(p, bezug))
-            + t("sicherung_kern") + _danach(p))
+            + t("sicherung_kern") + _danach(p, automatisch))
 
 
 def stopp_kontext(p, bezug=None):
@@ -57,8 +60,19 @@ def reserve_block(p, bezug=None):
     return t("reserve_block", app=t("app"), pctw=sprache.prozent(p.get("pctw", 0)), wer=sprache.wer())
 
 
-def codex_stopp(p, bezug=None):
-    return t("codex_kopf", app=t("app"), stand=stand(p, bezug)) + t("codex_kern") + _danach(p)
+def codex_stopp(p, bezug=None, automatisch=True):
+    return t("codex_kopf", app=t("app"), stand=stand(p, bezug)) + t("codex_kern") + _danach(p, automatisch)
+
+
+def weiter_block(bezug=None):
+    return t("weiter_block", app=t("app"), wer=sprache.wer())
+
+
+def nacht_antwort(art, bis=None, bezug=None):
+    """Antwort auf '#nacht …' im Hook. art: "an" | "alle" | "aus"."""
+    zeit = util.uhrzeit(bis, bezug)
+    return t({"an": "nacht_an_hook", "alle": "nacht_alle_hook",
+              "aus_global": "nacht_aus_global_hook"}.get(art, "nacht_aus_hook"), app=t("app"), zeit=zeit)
 
 
 # ---------------------------------------------------------------- Push-Texte (kurz, ohne Projektinhalte)

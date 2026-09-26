@@ -23,12 +23,13 @@ class HookTest(TempHome):
         self.reset = self.now + 3600
         self.current("ok")
 
-    def current(self, phase, pct=None, reserve=False, stand=None, reset=None):
+    def current(self, phase, pct=None, reserve=False, stand=None, reset=None, nur_nacht=False):
         reset = reset or self.reset
         pct = pct if pct is not None else {"ok": 20, "warnung": 82, "stopp": 93, "limit": 100}[phase]
         util.schreib_json(util.pfad("state", "current.json"), {
             "version": 1, "stand": stand or self.now, "pausiert": False, "puffer_s": 120, "reserve_sperre": True,
             "hook_max_alter_s": 600, "sprache": self.sprache, "name": "",
+            "nur_nacht": nur_nacht, "nacht_ende": "08:00",
             "claude": {"phase": phase, "art": "fuenf", "pct": pct, "reset": reset,
                        "fenster_id": f"claude-fuenf-{int(round(reset / 600))}", "pct5": pct, "reset5": reset,
                        "pctw": 85.0 if reserve else 40.0, "resetw": self.now + 3 * 86400,
@@ -170,6 +171,107 @@ class HookTest(TempHome):
         self.current("ok", reserve=False)
         self.assertIsNone(self.ruf("UserPromptSubmit", prompt="Your claude.ai usage limit has reset. Continue."))
         self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
+
+    # ------------------------------------------------------------ v1.1 Nachtmodus
+    EINGEBAUT = "Your claude.ai usage limit has reset. Continue the task you were working on."
+
+    def test_nacht_befehl_an_auch_pausiert(self):
+        self.current("ok", nur_nacht=True)
+        self.ruf("UserPromptSubmit", prompt="normal")
+        util.schreib_json(util.pfad("state", "pause.json"), {"aktiv": True, "bis": None})
+        out = self.ruf("UserPromptSubmit", prompt="#nacht")
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("Nachtmodus an bis", out["reason"])
+        s = self.sitzung()
+        self.assertGreater(s["nacht_bis"], self.now)
+        self.assertEqual(s["status"], "aktiv", "Status bleibt unverändert")
+        self.assertEqual(s["terminal"], "term_test")
+        out = self.ruf("UserPromptSubmit", prompt="#nacht aus")
+        self.assertIn("Nachtmodus aus", out["reason"])
+        self.assertIsNone(self.sitzung()["nacht_bis"])
+
+    def test_nacht_alle(self):
+        out = self.ruf("UserPromptSubmit", prompt="#Nacht alle")
+        self.assertIn("alle Sitzungen", out["reason"])
+        self.assertGreater(util.lies_json(util.pfad("state", "nacht.json"), {})["alle_bis"], self.now)
+        self.assertEqual(self.sitzung()["terminal"], "term_test")
+
+    def test_night_on_englisch(self):
+        self.sprache = "en"
+        self.current("ok", nur_nacht=True)
+        out = self.ruf("UserPromptSubmit", prompt="#night on")
+        self.assertIn("Night mode on until", out["reason"])
+        self.assertIsNotNone(self.sitzung().get("nacht_bis"))
+
+    def test_normaler_prompt_unveraendert(self):
+        self.current("ok", nur_nacht=True)
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt="#nachtschicht planen"))
+        self.assertEqual(self.sitzung()["status"], "aktiv")
+
+    def test_eingebaut_ohne_nachtmodus_gesperrt(self):
+        self.current("ok", nur_nacht=True)
+        out = self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT)
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("weiter", out["reason"])
+        s = self.sitzung()
+        self.assertEqual((s["status"], s["weiter_gemeldet"]), ("wartet_auf_weiter", False))
+        self.assertEqual(util.lies_ereignisse()[-1]["typ"], "eingebaut_gesperrt")
+
+    def test_eingebaut_mit_nachtmodus_frei(self):
+        self.current("ok", nur_nacht=True)
+        self.ruf("UserPromptSubmit", prompt="#nacht")
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT))
+        self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
+
+    def test_eingebaut_mit_globalem_nachtmodus_frei(self):
+        self.current("ok", nur_nacht=True)
+        util.schreib_json(util.pfad("state", "nacht.json"), {"alle_bis": self.now + 3600})
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT))
+
+    def test_eingebaut_nicht_gesperrt_ohne_nur_nacht_oder_veraltet(self):
+        self.current("ok", nur_nacht=False)
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT))
+        self.current("ok", nur_nacht=True, stand=self.now - 3600)
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT), "veraltet -> fail passive")
+        self.current("ok", nur_nacht=True)
+        util.schreib_json(util.pfad("state", "pause.json"), {"aktiv": True, "bis": None})
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT), "pausiert -> nicht sperren")
+
+    def test_eingebaut_nach_weiter_push_kein_zweiter_push(self):
+        self.current("ok", nur_nacht=True)
+        register.aktualisieren("claude", self.SID, lambda d: d.update(status="wartet_auf_weiter",
+                                                                      weiter_gemeldet=True))
+        self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT)
+        s = self.sitzung()
+        self.assertEqual((s["status"], s["weiter_gemeldet"]), ("wartet_auf_weiter", True))
+
+    def test_fired_nach_sperre_ueberschreibt_nicht(self):
+        self.current("ok", nur_nacht=True)
+        self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT)
+        self.ruf("Notification", notification_type="quota_auto_resume_fired", message="x")
+        self.assertEqual(self.sitzung()["status"], "wartet_auf_weiter")
+
+    def test_nacht_aus_bei_globalem_nachtmodus(self):
+        self.current("ok", nur_nacht=True)
+        util.schreib_json(util.pfad("state", "nacht.json"), {"alle_bis": self.now + 3600})
+        out = self.ruf("UserPromptSubmit", prompt="#nacht aus")
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("für alle Sitzungen ist er aber noch an", out["reason"])
+
+    def test_reserve_vor_nachtsperre(self):
+        self.current("ok", reserve=True, nur_nacht=True)
+        self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT)
+        self.assertEqual(self.sitzung()["status"], "reserve")
+
+    def test_sicherungsauftrag_je_nach_nachtmodus(self):
+        self.current("stopp", nur_nacht=True)
+        block = self.ruf("Stop", stop_hook_active=False)
+        self.assertIn("„weiter“", block["reason"])
+        self.assertNotIn("automatisch fort", block["reason"])
+        self.SID = "22222222-2222-3333-4444-555555555555"
+        self.ruf("UserPromptSubmit", prompt="#nacht")
+        block = self.ruf("Stop", stop_hook_active=False)
+        self.assertIn("automatisch", block["reason"])
 
     def test_prompt_hinweis_im_stopp(self):
         self.current("stopp")

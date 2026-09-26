@@ -19,6 +19,8 @@ wochen_reserve = 20    # weekly reserve: above 100 - 20 = 80 % weekly use there 
 
 [fortsetzen]                           # continuing after the reset
 aktiv = true
+nur_mit_nachtmodus = true               # only sessions in night mode continue automatically; the others
+                                       # wait for you to type "continue" (Claude's built-in auto-continue is blocked too)
 puffer_minuten = 2                     # wait this long after resets_at
 max_pro_fenster = 2                    # at most 2 automatic continuations per session and window
 pro_tick = 2                           # staggered: at most 2 continuations per minute
@@ -53,4 +55,4 @@ remote_modus_pruefen = true            # at night, warn if the Mac would sleep w
 remote_modus_befehl = ""               # optional command shown in that warning, e.g. "~/bin/stay-awake.sh on"
 
 [bericht]                              # morning report
-uhrzeit = "08:00"                      # only sent if something happened overnight
+uhrzeit = "08:00"                      # only sent if something happened overnight; night mode ends at this time

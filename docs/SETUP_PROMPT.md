@@ -46,7 +46,7 @@ Hard rules (never break them):
    - Language of notifications and texts: English or German (`sprache = "en" | "de"`).
    - Optional: my first name for the texts the hooks show to Claude.
    - Thresholds: keep the defaults (warn 80 %, orderly stop 92 %, weekly reserve 20 %) or change them.
-   - Whether sessions should be continued automatically after the reset (`[fortsetzen] aktiv = true/false`).
+   - Whether sessions should be continued automatically after the reset (`[fortsetzen] aktiv = true/false`), and whether only sessions in night mode are continued (`nur_mit_nachtmodus = true`, default; `false` = continue every session, as in 1.0).
    Write my answers into config.local.toml (create it if needed; it is ignored by git). Only put the values I
    want to change there, and validate with `./waechter.py status`.
 

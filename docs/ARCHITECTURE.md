@@ -10,8 +10,9 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 |---|---|---|---|
 | Tick | `waechter.py tick` → `lw/tick.py` | LaunchAgent, every 60 s (~0.4 s) | collect usage, compute phases, notify, stop Codex, continue sessions, keep the Mac awake, morning report |
 | Claude hook | `hooks/claude_hook.py` | Claude Code, on hook events | map session ↔ Orca terminal, deny new subagents, checkpoint request, record limit errors |
-| State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `log/`, `berichte/` (reports), `backups/` |
-| CLI | `lw/cli.py` | you | `status`, `pause`, `report`, `simulate`, `ntfy-setup`, … |
+| Night mode | `lw/nacht.py` | tick, hook, CLI | who is continued after the reset: `nacht_bis` per session, `state/nacht.json` for all; ends at the report time |
+| State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks, plus `nur_nacht` / `nacht_ende`), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `log/`, `berichte/` (reports), `backups/` |
+| CLI | `lw/cli.py` | you | `status`, `night`, `pause`, `report`, `simulate`, `ntfy-setup`, … |
 
 ## Data sources (all read-only)
 
@@ -49,7 +50,7 @@ continuation.
 
 | Event | Matcher | Behaviour |
 |---|---|---|
-| `SessionStart`, `UserPromptSubmit` | – | register session ↔ `ORCA_TERMINAL_HANDLE` / pane / worktree; recognise the watchdog's own continuation prompt and Claude's built-in one; with the weekly reserve reached, block the built-in continuation prompt |
+| `SessionStart`, `UserPromptSubmit` | – | register session ↔ `ORCA_TERMINAL_HANDLE` / pane / worktree; recognise the watchdog's own continuation prompt and Claude's built-in one; with the weekly reserve reached, block the built-in continuation prompt. `UserPromptSubmit` also: `#night`/`#nacht [on\|off\|all]` switches night mode (`decision: block`, never reaches the model, works even while paused); without night mode (and `nur_mit_nachtmodus`) the built-in continuation prompt is blocked and the session set to `wartet_auf_weiter` |
 | `PreToolUse` | `Agent\|Task\|Workflow` | in *Stop*/*Limit*: `permissionDecision: deny` with a short reason (also inside subagents) |
 | `PostToolUse` | `*` | in *Stop*, once per session and window: `additionalContext` with the stop request |
 | `Stop` | – | in *Stop*, once per session and window: `decision: block` with the checkpoint request (`stop_hook_active` respected); the next stop marks the session as stopped |
@@ -63,8 +64,13 @@ continues normally). Subagent calls (`agent_id` present) are ignored except for 
 
 ## Continuing after the reset
 
-For every waiting session whose `reset + 2 min` has passed (Claude sessions at the limit get 5 more minutes so
-Claude's built-in auto-continue can go first):
+For every waiting session whose `reset + 2 min` has passed: if `[fortsetzen] nur_mit_nachtmodus` is on (default)
+and the session is **not in night mode at that moment** (expired = off), it becomes `wartet_auf_weiter`: nothing is
+sent, the screen is not read, and one push per provider collects all such sessions (held back up to 3 minutes so
+sessions resetting together land in one message). A Codex thread leaves that status when its rollout shows new
+activity; a Claude session on its next normal prompt. If night mode is switched on later, sessions that have
+been in `wartet_auf_weiter` for less than 12 hours go back into the queue with `fortsetzen_ab = now`. Sessions in night mode go on (Claude sessions at the limit
+get 5 more minutes so Claude's built-in auto-continue can go first):
 
 1. weekly reserve reached at stop time or now → *reserve*, notify, done
 2. already two automatic attempts in this window → *gave up*, notify
@@ -76,7 +82,7 @@ Claude's built-in auto-continue can go first):
 6. a few minutes later: check whether the continued session is stuck at a prompt → notify
 
 At most two continuations per tick (staggered). While a continuation is pending within the next 12 hours the
-tick keeps `caffeinate -i -s` running until reset + 15 minutes and, at night, warns if the Mac would sleep with
+tick keeps `caffeinate -i -s` running (only for sessions that will actually be continued) until reset + 15 minutes and, at night, warns if the Mac would sleep with
 the lid closed or runs on battery.
 
 ## Codex
@@ -89,6 +95,8 @@ continuing works like for Claude. If Orca explicitly rejects a send, `codex queu
 ## Design decisions
 
 - **Built-in first:** Claude Code's auto-continue is official; the watchdog fills the gaps instead of replacing it.
+- **Continuing is opt-in (1.1):** stopping protects every session; continuing unattended is a decision per night,
+  so it needs night mode. Night mode is only a timestamp compare – no background job has to switch it off.
 - **Unclear means stop:** any screen the classifier does not understand leads to “send nothing, notify”.
 - **Money is a hard line:** no code path selects menu options; only a continuation prompt or a single Enter is typed.
 - **Fail passive:** stale state disables the hooks; the tick catches its own errors and reports them once a day.
