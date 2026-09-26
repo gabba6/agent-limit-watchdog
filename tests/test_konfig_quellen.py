@@ -36,9 +36,12 @@ aktiv = false
             konfig.parse_toml("nur text")
 
     def test_projekt_config_gueltig(self):
-        k = konfig.laden(os.path.join(os.path.dirname(fixture()), "..", "config.toml"), streng=True)
-        self.assertEqual((k["schwellen"]["warnung"], k["schwellen"]["stopp"], k["schwellen"]["wochen_reserve"]),
-                         (80, 92, 20))
+        datei = os.path.join(os.path.dirname(fixture()), "..", "config.toml")
+        k = konfig.laden(datei, streng=True)
+        # Standardwerte nur aus config.toml: eigene Schwellen in config.local.toml dürfen den Test nicht brechen
+        with open(datei, encoding="utf-8") as f:
+            s = konfig.parse_toml(f.read())["schwellen"]
+        self.assertEqual((s["warnung"], s["stopp"], s["wochen_reserve"]), (80, 92, 20))
         self.assertEqual(k["fortsetzen"]["max_pro_fenster"], 2)
         befehl = k["fortsetzen"]["claude_befehl"]
         self.assertTrue(os.path.isabs(befehl) or befehl == "claude", befehl)   # CI-Runner ohne Claude Code
