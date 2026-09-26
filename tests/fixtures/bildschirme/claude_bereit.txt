@@ -1,0 +1,8 @@
+⏺ Fertig. Der Stand steht in STATUS.md, WIP-Commit abc123 erstellt.
+  2. Nächster Schritt: Tests für den Export schreiben.
+✻ Worked for 29s · done 8:44 PM
+
+────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

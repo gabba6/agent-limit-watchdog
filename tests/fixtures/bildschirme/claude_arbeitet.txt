@@ -1,0 +1,7 @@
+⏺ Bash(pytest -q)
+  ⎿  Running…
+✻ Pondering… (38s · ↓ 2.1k tokens · esc to interrupt)
+────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

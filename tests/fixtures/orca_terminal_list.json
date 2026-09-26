@@ -1,0 +1,49 @@
+{
+ "ok": true,
+ "result": {
+  "terminals": [
+   {
+    "handle": "term_claude1",
+    "agentIdentity": "claude",
+    "worktreePath": "/tmp/projekt",
+    "tabId": "tab1",
+    "leafId": "leaf1",
+    "writable": true,
+    "connected": true,
+    "orphaned": false
+   },
+   {
+    "handle": "term_codex1",
+    "agentIdentity": "codex",
+    "worktreePath": "/tmp/projekt",
+    "tabId": "tab2",
+    "leafId": "leaf2",
+    "writable": true,
+    "connected": true,
+    "orphaned": false
+   },
+   {
+    "handle": "term_shell",
+    "agentIdentity": null,
+    "worktreePath": "/tmp/projekt",
+    "tabId": "tab3",
+    "leafId": "leaf3",
+    "writable": true,
+    "connected": true,
+    "orphaned": false
+   },
+   {
+    "handle": "term_waise",
+    "agentIdentity": "claude",
+    "worktreePath": "",
+    "tabId": "pty:x",
+    "leafId": "pty:x",
+    "writable": true,
+    "connected": true,
+    "orphaned": true
+   }
+  ],
+  "totalCount": 4,
+  "truncated": false
+ }
+}

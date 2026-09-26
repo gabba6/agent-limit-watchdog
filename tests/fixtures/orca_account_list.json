@@ -1,0 +1,65 @@
+{
+ "id": "x",
+ "ok": true,
+ "result": {
+  "claude": {},
+  "codex": {},
+  "rateLimits": {
+   "claude": {
+    "provider": "claude",
+    "session": {
+     "usedPercent": 93,
+     "windowMinutes": 300,
+     "resetsAt": 1790433000000,
+     "resetDescription": "4:30 PM"
+    },
+    "weekly": {
+     "usedPercent": 45,
+     "windowMinutes": 10080,
+     "resetsAt": 1790470800000,
+     "resetDescription": "Sun 3:00 AM"
+    },
+    "fableWeekly": {
+     "usedPercent": 0,
+     "windowMinutes": 10080,
+     "resetsAt": 1790470800000
+    },
+    "updatedAt": 1790415814037,
+    "error": null,
+    "status": "ok"
+   },
+   "codex": {
+    "provider": "codex",
+    "session": {
+     "usedPercent": 0,
+     "windowMinutes": 300,
+     "resetsAt": 1790433350000,
+     "resetDescription": "4:35 PM"
+    },
+    "weekly": {
+     "usedPercent": 31,
+     "windowMinutes": 10080,
+     "resetsAt": 1790935478000
+    },
+    "rateLimitResetCredits": {
+     "availableCount": 1,
+     "credits": [
+      {
+       "status": "available"
+      }
+     ]
+    },
+    "updatedAt": 1790415350778,
+    "error": null,
+    "status": "ok"
+   },
+   "gemini": {
+    "provider": "gemini",
+    "session": null,
+    "weekly": null,
+    "status": "unavailable"
+   }
+  }
+ },
+ "_meta": {}
+}

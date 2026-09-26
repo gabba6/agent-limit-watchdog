@@ -1,0 +1,8 @@
+⏺ Bash(pytest -q)
+  ⎿  Running…
+✻ Thundering… (36m 32s · ↓ 210.0k tokens · thought for 18s)
+  ⎿  Tip: Use /clear to start fresh when switching topics and free up context
+────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

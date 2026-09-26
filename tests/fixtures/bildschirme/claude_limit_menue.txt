@@ -1,0 +1,10 @@
+⏺ Ich arbeite an Schritt 3.
+  ⎿  You've hit your session limit · resets 4:30pm (Europe/Berlin)
+
+ What do you want to do?
+
+ ❯ 1. Stop and wait for limit to reset
+   2. Switch to usage credits
+   3. Upgrade your plan
+
+ Enter to confirm · Esc to cancel

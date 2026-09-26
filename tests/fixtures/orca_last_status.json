@@ -1,0 +1,22 @@
+{
+ "version": 1,
+ "entries": {
+  "tab2:leaf2": {
+   "paneKey": "tab2:leaf2",
+   "source": "codex",
+   "providerSession": {
+    "key": "session_id",
+    "id": "01a0bf6b-ae1f-7de0-8b05-aa0baa8a6479"
+   }
+  },
+  "tab1:leaf1": {
+   "paneKey": "tab1:leaf1",
+   "source": "claude",
+   "providerSession": {
+    "key": "session_id",
+    "id": "c1",
+    "transcriptPath": "/tmp/c1.jsonl"
+   }
+  }
+ }
+}

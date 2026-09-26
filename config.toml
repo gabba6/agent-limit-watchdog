@@ -1,0 +1,56 @@
+# Limit Watchdog – configuration
+# Changes take effect with the next tick (every minute). Check with: ./waechter.py status
+# Personal overrides go into config.local.toml next to this file (ignored by git), e.g.:
+#   [allgemein]
+#   sprache = "de"
+#   name = "Alex"
+
+[allgemein]                            # general
+sprache = "en"                         # language of notifications, CLI output and hook texts: "en" | "de"
+name = ""                              # optional: your name, used in the texts the hooks show to Claude
+launchagent_label = "local.limit-waechter"
+
+[schwellen]                            # thresholds
+warnung = 80           # % of the 5-hour window: notification
+stopp = 92             # % of the 5-hour window: orderly stop (no new subagents/workflows, checkpoint, pause)
+woche_warnung = 80     # % of the weekly window
+woche_stopp = 92       # % of the weekly window
+wochen_reserve = 20    # weekly reserve: above 100 - 20 = 80 % weekly use there is no automatic continuation
+
+[fortsetzen]                           # continuing after the reset
+aktiv = true
+puffer_minuten = 2                     # wait this long after resets_at
+max_pro_fenster = 2                    # at most 2 automatic continuations per session and window
+pro_tick = 2                           # staggered: at most 2 continuations per minute
+claude_limit_resume = "waechter"       # "waechter" or "orca" (if Orca's own rate-limit watcher handles Claude)
+claude_eingebaut_karenz_minuten = 5    # give Claude Code's built-in auto-continue this head start
+reserve_sperrt_eingebaute_fortsetzung = true   # the weekly reserve also blocks Claude's built-in auto-continue
+claude_befehl = ""                     # path to claude (empty = find automatically)
+claude_modus = "auto"                  # permission mode for sessions restarted with --resume
+codex_befehl = ""                      # path to codex (empty = find automatically)
+codex_sandbox = "workspace-write"
+codex_stopp_senden = true              # in the stop phase, send a short message to working Codex terminals
+pruefen_nach_minuten = 2               # check a few minutes later whether the continuation got stuck
+
+[daten]                                # data sources
+orca = "/Applications/Orca.app/Contents/Resources/bin/orca"
+codex_sessions = "~/.codex/sessions"
+orca_hook_status = "~/Library/Application Support/orca/agent-hooks/last-status.json"
+max_alter_minuten = 30                 # older usage data is shown as stale
+hook_zustand_max_alter_minuten = 10    # if the state is older (watchdog not running), the hooks do nothing
+
+[melden]                               # notifications
+ntfy = true
+ntfy_server = "https://ntfy.sh"
+ntfy_dienst = "limit-waechter-ntfy"    # name of the macOS keychain item (the topic itself is only stored there)
+banner = true                          # macOS notification banner
+
+[wach]                                 # keeping the Mac awake
+caffeinate = true                      # caffeinate -i -s until reset + grace time while a continuation is pending
+nachlauf_minuten = 15
+max_stunden_voraus = 12                # only keep awake for continuations within the next 12 hours
+remote_modus_pruefen = true            # at night, warn if the Mac would sleep with the lid closed or runs on battery
+remote_modus_befehl = ""               # optional command shown in that warning, e.g. "~/bin/stay-awake.sh on"
+
+[bericht]                              # morning report
+uhrzeit = "08:00"                      # only sent if something happened overnight

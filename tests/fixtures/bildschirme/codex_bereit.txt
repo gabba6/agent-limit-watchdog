@@ -1,0 +1,5 @@
+• Ich habe den Stand in PLAN.md gesichert.
+
+› Ask Codex to do anything
+
+  ⏎ send   ⌃J newline   ⌃T transcript   ⌃C quit   42% context left

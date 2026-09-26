@@ -1,0 +1,6 @@
+  Use a rate limit reset credit to continue now?
+
+› 1. Yes, use 1 reset credit
+  2. No, wait until 7:10 PM
+
+  Press enter to confirm or esc to go back

@@ -1,0 +1,22 @@
+{
+ "ok": true,
+ "result": {
+  "worktrees": [
+   {
+    "path": "/tmp/projekt",
+    "agents": [
+     {
+      "paneKey": "tab1:leaf1",
+      "state": "done",
+      "agentType": "claude"
+     },
+     {
+      "paneKey": "tab2:leaf2",
+      "state": "working",
+      "agentType": "codex"
+     }
+    ]
+   }
+  ]
+ }
+}
