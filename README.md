@@ -12,6 +12,11 @@ It warns you before the limit, lets running agents **save their work and pause i
 
 🇩🇪 Deutsche Bedienungsanleitung: [docs/ANLEITUNG.de.md](docs/ANLEITUNG.de.md)
 
+<p align="center">
+  <img src="docs/images/menu-bar-app.png" width="340" alt="Menu bar app: usage rings for Claude and Codex, pause, night mode per session">
+  <br><sub>The optional menu bar app (demo data). Same information on the command line:</sub>
+</p>
+
 ```
 Limit Watchdog 1.2 · 26.09. 16:22
 Watchdog: active · last tick 14 s ago · LaunchAgent loaded

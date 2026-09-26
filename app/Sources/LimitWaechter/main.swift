@@ -43,6 +43,10 @@ if let i = argumente.firstIndex(of: "--selbsttest") {
     }
 }
 
+if argumente.contains("--vorschau") {
+    MainActor.assumeIsolated { Vorschau.starten() }
+}
+
 struct LimitWaechterApp: App {
     @StateObject private var speicher = Speicher()
 

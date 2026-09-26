@@ -20,4 +20,8 @@ Limit-Waechter.app/Contents/MacOS/LimitWaechter --version
 Limit-Waechter.app/Contents/MacOS/LimitWaechter --selbsttest tests/fixtures/app/status.json
 ```
 
+Screenshots: `LimitWaechter --vorschau` shows the popover content in a normal window and prints its window
+number once loaded, so `screencapture -o -l <number> shot.png` captures only that window. Point
+`LIMIT_WAECHTER_PROJEKT` at a folder with a stand-in `waechter.py` to use demo data instead of your real sessions.
+
 Installation and the autostart LaunchAgent are handled by `install.sh`.
