@@ -14,7 +14,11 @@ If `privat/PLAN.md` exists, read it first: it is the maintainer's local status (
 - **No secrets** in files, logs or chats. The ntfy topic lives only in the macOS keychain; mention only the
   service name `limit-waechter-ntfy`.
 - **Other sessions:** only address Orca terminals whose `agentIdentity` is `claude` or `codex`; read the screen
-  before every send; at most 2 automatic continuations per session and window.
+  before every send; at most 2 automatic continuations per session and window. Outside Orca never type, never read
+  a screen, never open a terminal or window; only official ways (Claude's hooks and built-in auto-continue,
+  `codex queue` with a text message only).
+- **Status line:** only wrap it, never replace it; save the original first (restored by `uninstall.sh`). Our
+  `statusLine` command must not contain `agent-hooks/claude-statusline` (Orca would treat it as its own and overwrite it).
 - **Deleting** only with explicit approval of the maintainer.
 - **The maintainer's live installation must keep working:** larger refactors happen in a separate working copy
   and are switched over only after the tests pass.

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0 – 2026-09-26
+
+Without Orca. Orca is now optional.
+
+- Claude Code in **normal terminals** is watched too: the hooks register the session with its location
+  (`orca` / `terminal` / `desktop`, new `lw/orte.py`), warn, deny new subagents/workflows and give the checkpoint
+  request (tested live). Claude Desktop is recognised by `CLAUDE_CODE_ENTRYPOINT` (probably; not confirmed).
+  Headless runs outside Orca (`claude -p`, Agent SDK) and Claude Code on the web are ignored.
+- Outside Orca the watchdog never types, reads screens or opens windows. Claude continues only through its built-in
+  auto-continue (with night mode); otherwise a push with a command to copy (`claude --resume <id>`).
+- Codex outside Orca: sessions found from recent rollout files (`originator`); warning and push with
+  `codex resume <id>`. Experimental, untested option `[fortsetzen] codex_queue = true`: stop message and
+  continuation via `codex queue`. The Codex app is display/warning only.
+- New **status line chain** (`hooks/statusline.py`): `install.sh` wraps the existing `statusLine`, stores Claude's
+  usage in `state/statusline.json` and runs the original unchanged; `uninstall.sh` restores it. The fresher of
+  Orca and status line wins. If the status line gets replaced, `status` and the app show a hint.
+- Without Orca installed: no Orca calls, errors or “Orca unreachable” pushes.
+- New option `[allgemein] nur_orca` (`true` = behaviour up to 1.2).
+- `status` and the app show location and capabilities per session and the state of the status line chain;
+  `status --json` has new keys (`orca_vorhanden`, `nur_orca`, `statusline`, per session `ort`, `ort_text`,
+  `faehigkeiten`, `faehigkeiten_text`, `automatisch`); existing keys are unchanged.
+
 ## 1.2.0 – 2026-09-26
 
 Menu bar app.

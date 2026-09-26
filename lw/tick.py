@@ -2,7 +2,7 @@
 
 import time
 
-from . import bericht, codex, fortsetzen, nacht, phasen, quellen, register, sprache, texte, util, wach
+from . import bericht, codex, fortsetzen, nacht, orte, phasen, quellen, register, sprache, texte, util, wach
 from .sprache import t
 from .orca import OrcaFehler
 
@@ -21,22 +21,26 @@ def pause_info(now):
 
 def daten_sammeln(ctx, sim=None):
     k, now = ctx.k, ctx.now
-    d = {"orca_ok": True, "fehler": []}
+    vorhanden = ctx.orca_vorhanden()
+    d = {"orca_ok": vorhanden, "orca_vorhanden": vorhanden, "fehler": []}
     if sim is not None:
         d.update(sim)
         if "rollouts" not in sim:
             d["rollouts"] = quellen.rollout_dateien(k["daten"]["codex_sessions"], now)
         return d
-    try:
-        lim = quellen.orca_limits(ctx.orca.konten())
-    except OrcaFehler as e:
-        lim = {}
-        d["orca_ok"] = False
-        d["fehler"].append(str(e))
+    lim = {}
+    if vorhanden:                     # ohne Orca: kein Aufruf, kein Fehler, keine Log-Zeile (v1.3)
+        try:
+            lim = quellen.orca_limits(ctx.orca.konten())
+        except OrcaFehler as e:
+            d["orca_ok"] = False
+            d["fehler"].append(str(e))
     rollouts = quellen.rollout_dateien(k["daten"]["codex_sessions"], now)
     roll = quellen.codex_nutzung(rollouts)
     d["rollouts"] = rollouts
-    d["claude"] = lim.get("claude")
+    sl = quellen.claude_statusline(util.pfad(*quellen.STATUSLINE_DATEI))
+    d["claude"] = phasen.waehle_quelle(lim.get("claude"), sl)     # frischere gewinnt, Gleichstand: Orca
+    d["claude_quellen"] = {"orca": (lim.get("claude") or {}).get("stand"), "statusline": (sl or {}).get("stand")}
     d["codex"] = phasen.waehle_quelle(lim.get("codex"), roll)
     d["codex_credits"] = (roll or {}).get("credits")
     d["codex_reset_credits"] = (lim.get("codex") or {}).get("reset_credits")
@@ -68,6 +72,7 @@ def current_schreiben(k, ph, pausiert, now):
         "nur_nacht": bool(k["fortsetzen"]["aktiv"] and k["fortsetzen"]["nur_mit_nachtmodus"]),
         "nacht_ende": str(k["bericht"]["uhrzeit"]),
         "sprache": k["allgemein"]["sprache"],
+        "nur_orca": bool(k["allgemein"].get("nur_orca")),
         "name": k["allgemein"]["name"],
         "claude": ph["claude"],
         "codex": ph["codex"],
@@ -203,11 +208,7 @@ def _nur_nacht(k):
 
 def _auf_weiter_setzen(s):
     """Ohne Nachtmodus: nichts senden, nur vermerken (der Nutzer tippt selbst "weiter")."""
-    def aenderung(d):
-        d["status"] = "wartet_auf_weiter"
-        d["weiter_gemeldet"] = False
-    register.aktualisieren(s["anbieter"], s["id"], aenderung, "ohne Nachtmodus: wartet auf weiter")
-    util.ereignis("wartet_auf_weiter", anbieter=s["anbieter"], sitzung=s["id"], cwd=s.get("cwd"))
+    fortsetzen.auf_weiter_setzen(s)
 
 
 def _weiter_melden(ctx):
@@ -223,7 +224,12 @@ def _weiter_melden(ctx):
         if any(s.get("anbieter") == anb and s.get("status") in register.WARTET
                and now < (s.get("fortsetzen_ab") or 0) <= now + 180 for s in alle):
             continue
-        ctx.melder.senden(t("push_wartet_auf_weiter", n=texte.NAME[anb], anzahl=len(offen)),
+        text = t("push_wartet_auf_weiter", n=texte.NAME[anb], anzahl=len(offen))
+        befehle = [orte.kopierbefehl(s) for s in offen if orte.ort(s) != "orca"]
+        if befehle:                  # außerhalb von Orca: Kopierbefehl anhängen (höchstens zwei, kurz halten)
+            text += "\n" + t("push_weiter_befehl", n=texte.NAME[anb],
+                             befehl=" / ".join(befehle[:2]) + (" …" if len(befehle) > 2 else ""))
+        ctx.melder.senden(text,
                           prio=2 if _nacht(now) else 3, tags=["hand"])
         for s in offen:
             register.aktualisieren(anb, s["id"], lambda d: d.update(weiter_gemeldet=True))
@@ -246,6 +252,8 @@ def _nachholen(k, sitzungen, now):
 
 def _wird_fortgesetzt(k, s, now):
     """Würde diese wartende Sitzung beim Reset automatisch fortgesetzt (für Wachhalten/Remote-Hinweis)?"""
+    if orte.ort(s) != "orca" and orte.faehigkeiten(s, k)["fortsetzen"] != "ja":
+        return False                 # außerhalb von Orca ohne eigene Fortsetzung (nur Push): nicht wachhalten
     if not _nur_nacht(k):
         return True
     b = nacht.bis(s, now)
@@ -261,15 +269,14 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
     zustand = util.lies_json(util.pfad(*ZUSTAND), {}) or {}
 
     daten = daten_sammeln(ctx, sim)
-    if not daten["orca_ok"]:
+    if not daten["orca_ok"] and daten.get("fehler"):
         ctx.orca_fehler = "; ".join(daten["fehler"])
     sitzungen = register.alle()
     ph = phasen_berechnen(k, daten, sitzungen, now)
     current_schreiben(k, ph, pausiert, now)
 
     if not pausiert:
-        if daten["orca_ok"]:
-            codex.verwalten(ctx, ph["codex"], daten.get("rollouts") or [])
+        codex.verwalten(ctx, ph["codex"], daten.get("rollouts") or [], daten["orca_ok"])
         sitzungen = register.alle()
         if k["fortsetzen"]["aktiv"] and _nachholen(k, sitzungen, now):
             sitzungen = register.alle()
@@ -280,7 +287,8 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
 
     wartend = [s for s in sitzungen if s.get("status") in register.WARTET and s.get("fortsetzen_ab")]
     if not pausiert:
-        if not daten["orca_ok"] and wartend:
+        if not daten["orca_ok"] and daten.get("orca_vorhanden", True) \
+                and any(orte.ort(s) == "orca" for s in wartend):
             ctx.melder.senden(t("push_orca_weg"), prio=4,
                               schluessel=f"orca-weg:{int(now // 3600)}")
         if k["fortsetzen"]["aktiv"]:

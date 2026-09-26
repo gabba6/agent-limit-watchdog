@@ -18,6 +18,7 @@ STANDARD = {
         "sprache": "en",                          # "de" | "en"
         "name": "",                               # optional: dein Name für die Hook-Texte
         "launchagent_label": "local.limit-waechter",
+        "nur_orca": False,                        # v1.3: True = nur Orca-Terminals überwachen (Verhalten bis 1.2)
     },
     "schwellen": {
         "warnung": 80,          # % im 5h-Fenster
@@ -40,6 +41,8 @@ STANDARD = {
         "codex_befehl": "",
         "codex_sandbox": "workspace-write",
         "codex_stopp_senden": True,
+        "codex_queue": False,                     # v1.3: Codex außerhalb von Orca per `codex queue` stoppen/fortsetzen
+                                                  # (nicht echt getestet -> Standard aus, dann nur Warnung/Push)
         "pruefen_nach_minuten": 2,
     },
     "daten": {

@@ -1,6 +1,6 @@
 # Bedienungsanleitung (Deutsch)
 
-Stand: Version 1.2 (Menüleisten-App). Die englische Beschreibung steht in der [README](../README.md).
+Stand: Version 1.3 (Orca optional). Die englische Beschreibung steht in der [README](../README.md).
 
 ## Ganz einfach erklärt (hier anfangen)
 
@@ -51,31 +51,46 @@ Der Nachtmodus beantwortet nur eine Frage: **Geht es nach dem Reset automatisch 
 
 ### Wo er wirkt und wo nicht
 
-Der Wächter steuert **nur Sitzungen, die in einem Orca-Terminal laufen**. Nur dort kann er den Bildschirm lesen,
-etwas eintippen und die Sitzung einer Session-ID zuordnen.
+Seit 1.3 gilt der Wächter für **Orca, normale Terminals und Desktop-Apps, soweit belegt**. Orca ist freiwillig.
+Den vollen Umfang gibt es aber nur in Orca: Nur dort liest er den Bildschirm und tippt selbst „weiter“.
 
-| Wo du arbeitest | Warnung/Anzeige | Geordneter Stopp | Fortsetzen nach dem Reset |
+**Außerhalb von Orca tippt er nie, liest nie einen Bildschirm und öffnet nie ein Fenster.** Er nutzt dort nur
+offizielle Wege. Das heißt im normalen Terminal:
+
+- Warnung und geordneter Stopp funktionieren bei Claude wie in Orca (über die Hooks, echt getestet).
+- Nach dem Reset tippt niemand automatisch weiter. Mit Nachtmodus darf Claudes **eingebautes** Weitermachen am
+  Limit laufen. Sonst bekommst du einen Push mit einem **Befehl zum Kopieren** (z. B. `claude --resume <ID>`).
+- Skript-Aufrufe ohne Fenster (`claude -p`, Agent SDK) und Claude Code im Web lässt er außerhalb von Orca in Ruhe.
+
+| Wo du arbeitest | Warnung | Geordneter Stopp | Fortsetzen nach dem Reset |
 |---|---|---|---|
 | **Claude Code im Orca-Terminal** | ✅ | ✅ | ✅ (mit Nachtmodus) |
 | **Codex im Orca-Terminal** | ✅ | ✅ | ✅ (mit Nachtmodus) |
-| Claude Code im normalen Terminal (Terminal.app, iTerm, VS Code …) | ✅ zählt mit | ❌ | ❌ vom Wächter nicht; Claudes eigenes Weitermachen bleibt dort ungebremst an |
-| Codex im normalen Terminal | ✅ zählt mit | ❌ | ❌ Codex bleibt am Limit einfach stehen |
-| Claude-Desktop-App, claude.ai, ChatGPT-/Codex-App | ✅ zählt mit | ❌ | ❌ |
+| Claude Code im normalen Terminal (Terminal.app, iTerm, VS Code …) | ✅ | ✅ | nur Claudes eingebautes Weitermachen am Limit (mit Nachtmodus), sonst Push mit Befehl |
+| Codex im normalen Terminal | ✅ | ❌ | nur Push mit Befehl (`codex resume <ID>`); experimentell und ungetestet: `codex_queue = true` |
+| Claude-Desktop-App | ✅ | vermutlich wie im Terminal (nicht bestätigt) | vermutlich wie im Terminal (nicht bestätigt) |
+| Codex-App | ✅ nur Anzeige | ❌ | ❌ |
+| claude.ai, chatgpt.com im Browser | ✅ zählt mit | ❌ | ❌ |
 
-Was heißt „zählt mit“? Alles läuft über **dasselbe Konto-Limit**. Arbeitest du in der Desktop-App, steigt der
-Füllstand genauso, und du bekommst auch die Warnung. Gestoppt und fortgesetzt werden aber **nur** die
-Orca-Sitzungen. Auch `#nacht` wirkt nur in Orca; woanders geht der Text einfach als normale Nachricht ans Modell.
+Was heißt „zählt mit“? Alles läuft über **dasselbe Konto-Limit**. Arbeitest du woanders, steigt der Füllstand
+genauso, und du bekommst auch die Warnung. `./waechter.py status` und die App zeigen je Sitzung, wo sie läuft und
+was der Wächter dort kann (z. B. „Terminal · warnt · stoppt · nur Push“).
 
-Zwei Folgen:
+**Faustregel:** Was nachts oder unbeaufsichtigt sicher weiterlaufen soll, startest du in **Orca**.
 
-- **Füllstand nur mit laufendem Orca:** Die Prozentwerte liest der Wächter aus Orca. Ist Orca geschlossen, sieht er
-  den Claude-Füllstand nicht und kann nicht rechtzeitig warnen.
-- **Faustregel:** Alles, was nachts oder unbeaufsichtigt laufen soll, startest du in **Orca**.
+### Woher kommt der Füllstand ohne Orca? (Statusline-Kette)
+
+Claude Code gibt den aktuellen Füllstand an die Statusline (die Zeile unten in Claude). `./install.sh`
+**umhüllt** deine vorhandene Statusline: Zuerst merkt sich der Wächter die Prozentwerte, dann läuft deine
+bisherige Statusline **unverändert** weiter. Das Original wird gesichert, `./uninstall.sh` stellt es wieder her.
+Liefern Orca und die Statusline beide Werte, gewinnt der frischere. Ersetzt Orca oder ein anderes Tool die
+Statusline später, zeigen `status` und die App einen Hinweis; dann einfach `./install.sh` erneut ausführen.
+Die Statusline läuft nur, solange eine Claude-Sitzung offen ist.
 
 ## Was der Wächter macht, in drei Sätzen
 
 Er schaut jede Minute, wie voll dein Claude- und Codex-Kontingent ist (5-Stunden-Fenster und Woche). Kurz vor dem
-Limit sorgt er dafür, dass deine Agenten in Orca ihren Stand sichern und geordnet anhalten. Nach dem Reset setzt er
+Limit sorgt er dafür, dass deine Agenten ihren Stand sichern und geordnet anhalten. Nach dem Reset setzt er
 die Sitzungen im **Nachtmodus** automatisch fort; alle anderen warten auf dein „weiter“, und du bekommst einen Push.
 Geld gibt er nie aus.
 
@@ -143,6 +158,8 @@ Eigene Werte gehören in die Datei **`config.local.toml`** im Ordner des Wächte
 sprache = "de"             # deutsche Pushes und Ausgaben
 name = "Alex"              # erscheint in den Hinweisen, die Claude bekommt
 
+nur_orca = false           # true = nur Sitzungen in Orca-Terminals überwachen (Verhalten bis 1.2)
+
 [schwellen]
 warnung = 80               # ab so viel % des 5h-Fensters: Warnung aufs Handy
 stopp = 92                 # ab so viel %: geordneter Stopp (sichern, anhalten)
@@ -153,6 +170,7 @@ wochen_reserve = 20        # ab 100 - 20 = 80 % Wochenverbrauch: keine automatis
 [fortsetzen]
 aktiv = true               # false = nach dem Reset nie automatisch fortsetzen (Stopp läuft trotzdem)
 nur_mit_nachtmodus = true  # nur Sitzungen im Nachtmodus fortsetzen; false = alles (Verhalten von 1.0)
+codex_queue = false        # experimentell, ungetestet: Codex im normalen Terminal per `codex queue` stoppen/fortsetzen
 puffer_minuten = 2         # so lange nach dem Reset warten
 max_pro_fenster = 2        # höchstens so viele automatische Fortsetzungen je Sitzung und Fenster
 
@@ -218,9 +236,9 @@ Von Hand fortsetzen: in der Sitzung einfach „weiter“ schreiben. Claude liest
 
 ## Für welche Apps gilt das?
 
-Nur für **Claude Code CLI** und **Codex CLI** in **Orca-Terminals**. Nicht gesteuert werden Claude Desktop,
-claude.ai im Browser, die ChatGPT-/Codex-App, Codex in VS Code sowie Claude im normalen Terminal.app oder iTerm.
-Deren Verbrauch zählt aber mit in den Prozentwerten.
+Für **Claude Code** und **Codex CLI** in Orca und in normalen Terminals, mit den Einschränkungen aus der Tabelle
+[Wo er wirkt und wo nicht](#wo-er-wirkt-und-wo-nicht). Die Claude-Desktop-App vermutlich wie ein Terminal (nicht
+bestätigt), die Codex-App nur mit Anzeige und Warnung. Der Verbrauch aller Apps zählt in den Prozentwerten mit.
 
 ## Wenn etwas komisch ist
 

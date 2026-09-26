@@ -23,7 +23,7 @@ class HookTest(TempHome):
         self.reset = self.now + 3600
         self.current("ok")
 
-    def current(self, phase, pct=None, reserve=False, stand=None, reset=None, nur_nacht=False):
+    def current(self, phase, pct=None, reserve=False, stand=None, reset=None, nur_nacht=False, nur_orca=None):
         reset = reset or self.reset
         pct = pct if pct is not None else {"ok": 20, "warnung": 82, "stopp": 93, "limit": 100}[phase]
         util.schreib_json(util.pfad("state", "current.json"), {
@@ -34,8 +34,12 @@ class HookTest(TempHome):
                        "fenster_id": f"claude-fuenf-{int(round(reset / 600))}", "pct5": pct, "reset5": reset,
                        "pctw": 85.0 if reserve else 40.0, "resetw": self.now + 3 * 86400,
                        "reserve_erreicht": reserve}})
+        if nur_orca is not None:
+            cur = util.lies_json(util.pfad("state", "current.json"))
+            cur["nur_orca"] = nur_orca
+            util.schreib_json(util.pfad("state", "current.json"), cur)
 
-    def ruf(self, ev, orca=True, **felder):
+    def ruf(self, ev, orca=True, entrypoint="cli", **felder):
         payload = {"session_id": self.SID, "transcript_path": "/tmp/gibt-es-nicht.jsonl", "cwd": "/tmp/projekt",
                    "permission_mode": "auto", "hook_event_name": ev}
         payload.update(felder)
@@ -43,6 +47,7 @@ class HookTest(TempHome):
         for n in list(env):
             if n.startswith("ORCA_"):
                 del env[n]
+        env["CLAUDE_CODE_ENTRYPOINT"] = entrypoint
         if orca:
             env.update({"ORCA_TERMINAL_HANDLE": "term_test", "ORCA_PANE_KEY": "tabT:leafT",
                         "ORCA_WORKTREE_ID": "repo-1::/tmp/projekt"})
@@ -79,7 +84,8 @@ class HookTest(TempHome):
         util.schreib_json(util.pfad("state", "pause.json"), {"aktiv": True, "bis": None})
         self.assertIsNone(self.ruf("PreToolUse", tool_name="Agent"))
         util.schreib_json(util.pfad("state", "pause.json"), {"aktiv": False})
-        self.assertIsNone(self.ruf("PreToolUse", orca=False, tool_name="Agent"), "nur Orca-Terminals")
+        self.current("stopp", nur_orca=True)
+        self.assertIsNone(self.ruf("PreToolUse", orca=False, tool_name="Agent"), "nur_orca: nur Orca-Terminals")
 
     # ------------------------------------------------------------ PostToolUse / Stop
     def test_stopp_ablauf(self):
@@ -297,6 +303,60 @@ class HookTest(TempHome):
         self.current("stopp")
         self.ruf("PreToolUse", tool_name="Agent")
         self.assertLess(self.dauer, 1.0, "Hook muss schnell sein")
+
+    # ------------------------------------------------------------ v1.3: außerhalb von Orca
+    def test_registrierung_terminal_und_desktop(self):
+        self.ruf("SessionStart", orca=False, source="startup")
+        s = self.sitzung()
+        self.assertEqual((s["ort"], s["entrypoint"], s["cwd"]), ("terminal", "cli", "/tmp/projekt"))
+        self.assertNotIn("terminal", s)
+        self.SID = "22222222-2222-3333-4444-555555555555"
+        self.ruf("SessionStart", orca=False, entrypoint="claude-desktop", source="startup")
+        self.assertEqual(self.sitzung()["ort"], "desktop")
+        self.ruf("SessionStart", source="startup")
+        self.assertEqual(self.sitzung()["ort"], "orca")
+
+    def test_alte_orca_felder_werden_entfernt(self):
+        self.ruf("SessionStart", source="startup")
+        self.assertEqual(self.sitzung()["terminal"], "term_test")
+        self.ruf("UserPromptSubmit", orca=False, prompt="hallo")
+        s = self.sitzung()
+        self.assertEqual(s["ort"], "terminal")
+        for feld in ("terminal", "pane_key", "worktree_id", "worktree"):
+            self.assertNotIn(feld, s)
+
+    def test_stop_block_ausserhalb_orca_ohne_automatik(self):
+        self.current("stopp")
+        self.assertEqual(self.ruf("PreToolUse", orca=False, tool_name="Agent")["hookSpecificOutput"]
+                         ["permissionDecision"], "deny")
+        block = self.ruf("Stop", orca=False, stop_hook_active=False)
+        self.assertEqual(block["decision"], "block")
+        self.assertIn("WIP-Commit", block["reason"])
+        self.assertIn("„weiter“", block["reason"])
+        self.assertNotIn("automatisch fort", block["reason"])
+        self.assertEqual(self.sitzung()["status"], "sicherung")
+
+    def test_eingebaut_ausserhalb_orca(self):
+        self.current("ok", nur_nacht=True)
+        out = self.ruf("UserPromptSubmit", orca=False, prompt=self.EINGEBAUT)
+        self.assertEqual(out["decision"], "block")
+        self.assertEqual(self.sitzung()["status"], "wartet_auf_weiter")
+        self.SID = "22222222-2222-3333-4444-555555555555"
+        self.assertEqual(self.ruf("UserPromptSubmit", orca=False, prompt="#nacht")["decision"], "block")
+        self.assertIsNone(self.ruf("UserPromptSubmit", orca=False, prompt=self.EINGEBAUT))
+        self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
+
+    def test_nur_orca_und_remote_ignoriert(self):
+        self.current("stopp", nur_orca=True)
+        self.assertIsNone(self.ruf("Stop", orca=False, stop_hook_active=False))
+        self.assertIsNone(self.ruf("UserPromptSubmit", orca=False, prompt="#nacht"))
+        self.assertEqual(self.sitzung(), {})
+        self.current("stopp")
+        self.assertIsNone(self.ruf("Stop", orca=False, entrypoint="remote", stop_hook_active=False))
+        self.assertEqual(self.sitzung(), {})
+        for ep in ("sdk-cli", "sdk-ts", "sdk-py", "mcp"):      # headless (claude -p, SDK): nie blocken
+            self.assertIsNone(self.ruf("Stop", orca=False, entrypoint=ep, stop_hook_active=False))
+            self.assertEqual(self.sitzung(), {})
 
 
 if __name__ == "__main__":

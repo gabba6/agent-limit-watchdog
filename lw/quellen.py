@@ -48,6 +48,40 @@ def orca_limits(result):
     return daten
 
 
+# ---------------------------------------------------------------- Claude-Statusline-Kette (v1.3)
+
+STATUSLINE_DATEI = ("state", "statusline.json")          # relativ zu util.basis(); geschrieben von hooks/statusline.py
+
+
+def _fenster_sl(f, minuten):
+    if not isinstance(f, dict) or f.get("pct") is None:
+        return None
+    try:
+        return {"pct": float(f["pct"]), "reset": float(f["reset"]) if f.get("reset") else None, "minuten": minuten}
+    except (TypeError, ValueError):
+        return None
+
+
+def claude_statusline(datei):
+    """state/statusline.json -> {'fuenf', 'woche', 'stand', 'quelle': 'statusline'} (Form wie orca_limits) oder None.
+
+    Dateiformat (Vertrag v1.3): {"version": 1, "stand": <epoch, Zeitpunkt des Schreibens>,
+    "fuenf": {"pct": <0..100>, "reset": <epoch>}, "woche": {"pct": …, "reset": …}}; fehlende Fenster = null."""
+    try:
+        with open(datei, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict):
+        return None
+    eintrag = {"fuenf": _fenster_sl(d.get("fuenf"), 300), "woche": _fenster_sl(d.get("woche"), 10080),
+               "stand": d.get("stand") if isinstance(d.get("stand"), (int, float)) else None,
+               "fehler": None, "status": None, "quelle": "statusline"}
+    if not (eintrag["fuenf"] or eintrag["woche"]):
+        return None
+    return eintrag
+
+
 # ---------------------------------------------------------------- Codex rollouts
 
 def iso_zu_epoch(text):

@@ -6,7 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **Stop hitting usage limits blindly.** Agent Limit Watchdog (originally *Limit-Wächter*) watches the usage
-limits of **Claude Code** and **Codex** running in [Orca](https://github.com/stablyai/orca) terminals on your Mac.
+limits of **Claude Code** and **Codex** on your Mac – in [Orca](https://github.com/stablyai/orca) terminals (full
+control) and, since 1.3, also in normal terminals (see [Where the watchdog can do what](#where-the-watchdog-can-do-what)).
 It warns you before the limit, lets running agents **save their work and pause in an orderly way**, and
 **continues them after the reset** – for sessions you put in *night mode*, also while you sleep. It never buys credits.
 
@@ -18,7 +19,7 @@ It warns you before the limit, lets running agents **save their work and pause i
 </p>
 
 ```
-Limit Watchdog 1.2 · 26.09. 16:22
+Limit Watchdog 1.3 · 26.09. 16:22
 Watchdog: active · last tick 14 s ago · LaunchAgent loaded
 Claude  5h 94% (resets 16:30)     week 57% (resets Sun 03:00) phase STOP     data 12 s old (orca)
 Codex   5h 44% (resets 22:51)     week 38% (resets Fri 12:04) phase OK       data 2 min old (orca)
@@ -96,28 +97,47 @@ flowchart LR
   T --> N["ntfy push · macOS banner"]
 ```
 
-- **Tick** (`waechter.py tick`, run by a LaunchAgent every minute, ~0.4 s): reads usage from Orca and Codex's
-  session files, computes the phase, sends notifications, stops Codex in an orderly way and continues sessions
+- **Tick** (`waechter.py tick`, run by a LaunchAgent every minute, ~0.4 s): reads usage from Orca, the Claude
+  status line chain and Codex's session files, computes the phase, sends notifications, stops Codex in an orderly way and continues sessions
   after the reset. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Claude Code hooks** (`hooks/claude_hook.py`, added to `~/.claude/settings.json` next to your other hooks):
   map sessions to Orca terminals, deny new subagents in the stop phase, give the checkpoint request, record limit
-  errors and Claude's `quota_auto_resume_*` notifications. The hooks only act in Orca terminals and go completely
-  passive when the watchdog is paused or not running.
+  errors and Claude's `quota_auto_resume_*` notifications. Since 1.3 they act in Orca terminals and in normal
+  terminals (`[allgemein] nur_orca = true` restores the Orca-only behaviour) and go completely passive when the
+  watchdog is paused or not running.
+- **Status line chain** (`hooks/statusline.py`, since 1.3): gives Claude usage without Orca, see below.
 - **Notifications** via [ntfy](https://ntfy.sh) (random topic stored only in the macOS keychain) and macOS banners.
   They contain short status texts only – no project names or content.
 
-## Which apps are covered?
+## Where the watchdog can do what
 
-| Where the agent runs | Covered? |
-|---|---|
-| **Claude Code CLI** in an **Orca** terminal | ✅ warn, orderly stop via hooks, limit detection, continue after reset |
-| **Codex CLI** in an **Orca** terminal | ✅ warn, orderly stop via a short message, limit detection, continue after reset |
-| Claude Code in Terminal.app, iTerm, VS Code/JetBrains terminals | ❌ the hooks deliberately do nothing outside Orca |
-| Claude Desktop (incl. its Code tab), claude.ai in the browser | ❌ not controlled |
-| ChatGPT / Codex desktop app, Codex IDE extension, chatgpt.com | ❌ not controlled |
+Orca is optional since 1.3. Outside Orca the watchdog **never types, never reads a screen and never opens a
+window**; it only uses official ways (Claude's hooks and built-in auto-continue, optionally `codex queue`).
 
-Usage in the apps marked ❌ still counts toward the same account limits, so it shows up in the percentages and
-can trigger warnings – but only sessions in Orca terminals are stopped and continued.
+| Where the agent runs | Warn | Stop | Continue after reset |
+|---|---|---|---|
+| **Claude Code** in an **Orca** terminal | ✅ | ✅ hooks | ✅ with night mode (screen check first) |
+| **Codex CLI** in an **Orca** terminal | ✅ | ✅ short message | ✅ with night mode (screen check first) |
+| **Claude Code** in a normal terminal (Terminal.app, iTerm, IDE terminals) | ✅ | ✅ hooks (tested live) | only Claude's built-in auto-continue at the hard limit, and only with night mode; otherwise a push with a command to copy (`claude --resume <id>`) |
+| **Codex CLI** in a normal terminal | ✅ | ❌ | push only (`codex resume <id>`); experimental, untested: `[fortsetzen] codex_queue = true` sends the stop message and the continuation via `codex queue` |
+| **Claude Desktop** | ✅ | probably like a normal terminal (hooks), not confirmed | probably like a normal terminal, not confirmed |
+| **Codex app** | ✅ display/warning only | ❌ | ❌ |
+| claude.ai / chatgpt.com in the browser | counts toward the limit | ❌ | ❌ |
+
+Headless runs outside Orca (`claude -p`, the Agent SDK) and Claude Code on the web are ignored, so scripts never
+get a checkpoint request. All usage counts toward the same account limits, so it shows up in the percentages and
+can trigger warnings.
+`status` and the menu bar app show for every session where it runs and what the watchdog can do there
+(e.g. “terminal · warns · stops · push only”).
+
+### Status line chain (Claude usage without Orca)
+
+Claude Code passes the current 5-hour and weekly usage to the command in `statusLine` of `~/.claude/settings.json`.
+`install.sh` **wraps** your existing status line: our entry runs `hooks/statusline.py`, which stores the usage in
+`~/.limit-waechter/state/statusline.json` and then runs your original command unchanged (same input, same output,
+same exit code). The original is saved in `state/statusline-original.json`; `uninstall.sh` puts it back. If Orca and
+the status line both deliver data, the fresher one wins. If Orca or another tool later replaces the status line,
+`status` and the app show a hint and usage falls back to Orca – run `./install.sh` again to restore the chain.
 
 ## Menu bar app (since 1.2)
 
@@ -144,7 +164,8 @@ terminals and never operates limit or purchase menus.
 
 - macOS (uses launchd, `pmset`, `caffeinate`, the keychain) and `/usr/bin/python3` (3.9+, standard library only –
   nothing to `pip install`; comes with the Xcode Command Line Tools)
-- [Orca](https://github.com/stablyai/orca): your agents run in Orca terminals; usage data comes from Orca
+- optional: [Orca](https://github.com/stablyai/orca) – only there can the watchdog read screens and continue
+  sessions by itself; without Orca, Claude usage comes from the status line chain
 - Claude Code **2.1.234 or newer** (hooks, built-in auto-continue); Codex CLI optional
 - optional: macOS 14+ and the Xcode Command Line Tools for the menu bar app
 - optional: the free [ntfy](https://ntfy.sh) app on your phone
@@ -192,7 +213,7 @@ It is told never to spend money, not to test with model calls and not to touch o
 
 | Where | What | Undo |
 |---|---|---|
-| `~/.claude/settings.json` | adds 9 hook entries (backup first; other tools' hooks are compared before writing) | `./uninstall.sh` removes only these |
+| `~/.claude/settings.json` | adds 9 hook entries and wraps `statusLine` (backup first; the original status line is saved; other tools' hooks are compared before writing) | `./uninstall.sh` removes only these and restores the original status line |
 | `~/.codex/hooks.json` | nothing (backup only) | – |
 | `~/Library/LaunchAgents/<label>.plist` | runs `waechter.py tick` every 60 s, starts at login | `./uninstall.sh` unloads it and moves the plist to the backups |
 | `~/Applications/Limit-Waechter.app` + `~/Library/LaunchAgents/<label>.app.plist` | only with `./install.sh app`: the menu bar app and its login item | `./uninstall.sh` unloads it and moves app and plist to the backups |
@@ -232,6 +253,8 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 | `fortsetzen.claude_limit_resume` | `"waechter"` | set to `"orca"` if Orca's own rate-limit watcher continues Claude at the limit |
 | `fortsetzen.claude_modus` | `"auto"` | permission mode for sessions restarted with `--resume` |
 | `allgemein.sprache` | `"en"` | `"de"` for German notifications and output |
+| `allgemein.nur_orca` | `false` | `true` = only watch sessions in Orca terminals (behaviour up to 1.2) |
+| `fortsetzen.codex_queue` | `false` | experimental, untested: stop and continue Codex in normal terminals via `codex queue` (text only) |
 
 ## Safety
 
@@ -241,7 +264,8 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
   text already in the input line, workflow views where letters act as shortcuts → nothing is sent).
 - **Built-in first.** Claude's own auto-continue gets a head start; the watchdog never sends a second
   “continue” into a session that is already working.
-- **Only agent terminals.** Only Orca terminals whose agent identity is `claude` or `codex` are addressed.
+- **Only agent terminals.** Only Orca terminals whose agent identity is `claude` or `codex` are typed into.
+  Outside Orca nothing is typed, no screen is read and no window is opened.
 - **Fails passive.** If the watchdog is not running for 10 minutes, the hooks stop intervening; a crashing
   hook never blocks Claude.
 - **Local only.** State, logs and reports stay in `~/.limit-waechter/`; the ntfy topic only lives in the keychain.
@@ -253,8 +277,11 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 
 ## Limitations
 
-- macOS only; agents must run in Orca terminals (see [Which apps are covered?](#which-apps-are-covered)).
-- Without a running Orca app there is no Claude usage data (limit errors are still detected).
+- macOS only. Automatic continuation by the watchdog itself only in Orca terminals (see
+  [Where the watchdog can do what](#where-the-watchdog-can-do-what)).
+- Claude usage needs a running Orca app or the status line chain (Claude only runs the status line while a
+  session is open; with an API key there is no usage data). Limit errors are still detected.
+- Claude Desktop detection (`CLAUDE_CODE_ENTRYPOINT`) and `codex queue` outside Orca are not verified yet.
 - Screen texts of Claude Code and Codex change with updates. Unknown screens mean “send nothing and notify”,
   so an update can make the watchdog more cautious, not more dangerous – but it may need new patterns in
   [`lw/bildschirm.py`](lw/bildschirm.py).
@@ -264,11 +291,12 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 
 - ~~v1.1 – night mode~~ – done, see [Night mode](#night-mode-since-11) and the [changelog](CHANGELOG.md).
 - ~~v1.2 – menu bar app~~ – done, see [Menu bar app](#menu-bar-app-since-12).
+- ~~v1.3 – without Orca~~ – done, see [Where the watchdog can do what](#where-the-watchdog-can-do-what).
 
 ## Development
 
 ```sh
-cd tests && /usr/bin/python3 -m unittest        # 140+ tests, no network, no model calls
+cd tests && /usr/bin/python3 -m unittest        # 180+ tests, no network, no model calls
 ./waechter.py simulate cycle                     # end-to-end dry run with a fake Orca
 ```
 
@@ -279,6 +307,8 @@ available in English and German ([`lw/sprache.py`](lw/sprache.py)). Coding agent
 ```
 waechter.py            CLI entry point
 hooks/claude_hook.py   Claude Code hook
+hooks/statusline.py    status line chain (stores usage, runs the original status line)
+lw/orte.py             where a session runs (orca/terminal/desktop) and what the watchdog can do there
 lw/tick.py             one run: data → phases → notifications → actions
 lw/quellen.py          data sources (Orca, Codex rollouts, Claude transcripts, pmset)
 lw/bildschirm.py       screen check before every send

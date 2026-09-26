@@ -40,8 +40,12 @@ struct Sitzung: Decodable, Identifiable {
     var status_text: String?
     var zuletzt: Double?
     var wartet: Bool?
+    var automatisch: Bool?
     var fortsetzen_ab: Double?
     var nacht_bis: Double?
+    var ort: String?
+    var ort_text: String?
+    var faehigkeiten_text: String?
 
     var imNachtmodus: Bool { nacht_bis != nil }
     var anzeigeName: String {
@@ -66,10 +70,14 @@ struct Status: Decodable {
     var bericht_uhrzeit: String?
     var schwellen: Schwellen?
     var sitzungen: [Sitzung]?
+    var orca_vorhanden: Bool?
+    var nur_orca: Bool?
+    var statusline: StatuslineInfo?
 
     enum CodingKeys: String, CodingKey {
         case version, jetzt, sprache, phasen, pausiert, pause_bis, letzter_tick, launchagent, orca_ok,
-             nacht, nur_mit_nachtmodus, bericht_uhrzeit, schwellen, sitzungen
+             nacht, nur_mit_nachtmodus, bericht_uhrzeit, schwellen, sitzungen,
+             orca_vorhanden, nur_orca, statusline
     }
 
     init(from decoder: Decoder) throws {
@@ -91,6 +99,9 @@ struct Status: Decodable {
         schwellen = try? c.decodeIfPresent(Schwellen.self, forKey: .schwellen)
         sitzungen = (try? c.decodeIfPresent([Nachsichtig<Sitzung>].self, forKey: .sitzungen))??
             .compactMap { $0.wert }
+        orca_vorhanden = try? c.decodeIfPresent(Bool.self, forKey: .orca_vorhanden)
+        nur_orca = try? c.decodeIfPresent(Bool.self, forKey: .nur_orca)
+        statusline = (try? c.decodeIfPresent(Nachsichtig<StatuslineInfo>.self, forKey: .statusline))??.wert
     }
 
     func phase(_ anbieter: String) -> Phase? { phasen?[anbieter] }
@@ -115,6 +126,12 @@ struct Status: Decodable {
         }
         return best
     }
+}
+
+/// v1.3: Zustand der Statusline-Kette (Claude-Füllstand ohne Orca).
+struct StatuslineInfo: Decodable {
+    var zustand: String?
+    var stand: Double?
 }
 
 struct SchwellenAntwort: Decodable {

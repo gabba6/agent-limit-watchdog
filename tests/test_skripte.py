@@ -49,6 +49,13 @@ class TestSkripte(unittest.TestCase):
         self.assertIn('"$LABEL.app"', s)
         self.assertNotIn("rm -rf", s)
 
+    def test_statusline_kette(self):
+        i, u = lesen("install.sh"), lesen("uninstall.sh")
+        self.assertIn('LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer statusline-ein "$SETTINGS"', i)
+        self.assertLess(i.index("statusline-ein"), i.index('"$MODUS" == hooks ]]; then'), "auch im Modus hooks")
+        self.assertIn('LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer statusline-aus "$SETTINGS"', u)
+        self.assertLess(u.index("claude-settings.json.$TS"), u.index("statusline-aus"), "erst Backup")
+
     def test_kein_rm_auf_applications(self):
         for name in ("install.sh", "uninstall.sh"):
             for zeile in lesen(name).splitlines():

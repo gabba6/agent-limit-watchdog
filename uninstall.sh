@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Limit Watchdog – uninstall: unload the LaunchAgent, remove only our own Claude hooks (with backup),
+# Limit Watchdog – uninstall: unload the LaunchAgent, remove only our own Claude hooks and restore the previous
+# status line (with backup),
 # unload and move the menu bar app, stop our caffeinate. Nothing is deleted: plists and app are moved to the backups, state/logs
 # (~/.limit-waechter) and the ntfy topic in the keychain are kept.
 set -euo pipefail
@@ -44,8 +45,10 @@ cp -p "$SETTINGS" "$LW/backups/claude-settings.json.$TS"
 [[ -f "$CODEX_HOOKS" ]] && cp -p "$CODEX_HOOKS" "$LW/backups/codex-hooks.json.$TS"
 print -- "   $LW/backups/claude-settings.json.$TS"
 
-say "4/5 Claude-Hooks austragen (nur die eigenen) …" "4/5 Removing Claude hooks (only our own) …"
-(cd "$PROJ" && $PY -m lw.installer austragen "$SETTINGS")
+say "4/5 Claude-Hooks austragen (nur die eigenen) und bisherige Statusline wiederherstellen …" \
+    "4/5 Removing Claude hooks (only our own) and restoring the previous status line …"
+(cd "$PROJ" && LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer statusline-aus "$SETTINGS")
+(cd "$PROJ" && LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer austragen "$SETTINGS")
 
 say "5/5 Eigenes caffeinate beenden …" "5/5 Stopping our caffeinate …"
 $PY - "$LW/state/wach.json" <<'PYEOF'

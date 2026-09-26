@@ -5,6 +5,7 @@ Handles werden nie zwischengespeichert, sondern bei jedem Tick neu gelesen.
 """
 
 import json
+import os
 import subprocess
 
 from . import util
@@ -44,6 +45,10 @@ class Orca:
         return d.get("result") or {}
 
     # ---------------------------------------------------------- lesen
+    def vorhanden(self):
+        """Ist Orca installiert (Programm ausführbar)? Ohne Orca läuft der Wächter trotzdem (v1.3)."""
+        return bool(self.pfad) and os.access(self.pfad, os.X_OK)
+
     def erreichbar(self):
         try:
             r = self._aufruf(["status"], timeout=20)

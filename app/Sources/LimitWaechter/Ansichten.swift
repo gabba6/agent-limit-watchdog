@@ -84,8 +84,11 @@ struct Kopf: View {
                     Text(zustandText(st)).font(.caption)
                 }
                 Text(tickText(st)).font(.caption2).foregroundStyle(.secondary)
-                if st?.orca_ok == false {
+                if st?.orca_ok == false && st?.orca_vorhanden != false {
                     Text(s.t("app_orca_fehlt")).font(.caption2).foregroundStyle(.orange)
+                }
+                if st?.statusline?.zustand == "zurueckgeschrieben" {
+                    Text(s.t("app_statusline_fehlt")).font(.caption2).foregroundStyle(.orange)
                 }
             }
             Spacer()
@@ -324,6 +327,9 @@ struct SitzungZeile: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(sitzung.anzeigeName).font(.callout).lineLimit(1).truncationMode(.middle)
                 Text(zeile2).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                if let z = zeile3 {
+                    Text(z).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.tail)
+                }
             }
             Spacer()
             Button {
@@ -341,12 +347,17 @@ struct SitzungZeile: View {
 
     var zeile2: String {
         var teile = [sitzung.status_text ?? sitzung.status ?? ""]
-        if sitzung.wartet == true, let ab = sitzung.fortsetzen_ab {
+        if sitzung.wartet == true, let ab = sitzung.fortsetzen_ab, sitzung.automatisch != false {
             teile.append(s.t("app_fortsetzung_ab", ["zeit": s.uhrzeit(ab)]))
-        } else if sitzung.status == "wartet_auf_weiter" {
+        } else if sitzung.status == "wartet_auf_weiter" || sitzung.wartet == true {
             teile.append(s.t("app_weiter_noetig"))
         }
         return teile.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    var zeile3: String? {
+        let teile = [sitzung.ort_text, sitzung.faehigkeiten_text].compactMap { $0 }.filter { !$0.isEmpty }
+        return teile.isEmpty ? nil : teile.joined(separator: " · ")
     }
 }
 

@@ -28,11 +28,12 @@ Hard rules (never break them):
 
 2. Check the prerequisites and report each result:
    - macOS, and /usr/bin/python3 works (`/usr/bin/python3 --version`, 3.9 or newer).
-   - Orca is installed: /Applications/Orca.app/Contents/Resources/bin/orca exists, and
+   - Orca (optional): /Applications/Orca.app/Contents/Resources/bin/orca exists, and
      `/Applications/Orca.app/Contents/Resources/bin/orca status --json` reports the runtime as reachable.
+     Without Orca the watchdog still works in normal terminals (see README, "Where the watchdog can do what").
    - Claude Code is 2.1.234 or newer (`claude --version`) and ~/.claude/settings.json exists.
    - Codex CLI (optional): `codex --version`.
-   - Read-only data check: `/Applications/Orca.app/Contents/Resources/bin/orca account list --json` contains
+   - Only if Orca is installed, read-only data check: `/Applications/Orca.app/Contents/Resources/bin/orca account list --json` contains
      result.rateLimits.claude (and .codex if used). Show me only the percentages, nothing else from that output.
    If something is missing, stop and tell me what to install. Do not install it yourself without asking.
 

@@ -278,8 +278,8 @@ TEXTE = {
     "b_meldung": {"de": "Gesendete Meldungen", "en": "Notifications sent"},
 
     # ------------------------------------------------------------ Kommandozeile
-    "cli_beschreibung": {"de": "Limit-Wächter für Claude Code und Codex in Orca",
-                         "en": "Limit Watchdog for Claude Code and Codex in Orca"},
+    "cli_beschreibung": {"de": "Limit-Wächter für Claude Code und Codex (Orca, Terminal, Desktop)",
+                         "en": "Limit Watchdog for Claude Code and Codex (Orca, terminal, desktop)"},
     "h_status": {"de": "Füllstand, Phasen, wartende Sitzungen", "en": "usage, phases, waiting sessions"},
     "h_alle": {"de": "auch aktive Sitzungen zeigen", "en": "also show active sessions"},
     "h_tick": {"de": "ein Durchlauf (macht der LaunchAgent jede Minute)",
@@ -319,8 +319,8 @@ TEXTE = {
         "en": "Thresholds: warn {w}%, stop {s}% (5h) · week {ww}/{ws}% · reserve {r}% "
               "(no auto-continue above {ab}% weekly use)",
     },
-    "st_sitzungen": {"de": "Sitzungen (letzte 2 Tage, Orca): {c} Claude, {x} Codex",
-                     "en": "Sessions (last 2 days, Orca): {c} Claude, {x} Codex"},
+    "st_sitzungen": {"de": "Sitzungen (letzte 2 Tage): {c} Claude, {x} Codex",
+                     "en": "Sessions (last 2 days): {c} Claude, {x} Codex"},
     "st_ab": {"de": " · Fortsetzung ab {zeit}", "en": " · continues from {zeit}"},
     "st_keine_wartet": {"de": "  (keine Sitzung wartet oder ist blockiert; alle anzeigen: status --alle)",
                         "en": "  (no session is waiting or blocked; show all: status --all)"},
@@ -569,4 +569,48 @@ TEXTE = {
                          "en": "Python or waechter.py not found: {pfad}"},
     "app_min": {"de": "{n} min", "en": "{n} min"},
     "app_std": {"de": "{h} h {m} min", "en": "{h} h {m} min"},
+
+    # ------------------------------------------------------------ v1.3: Orte und Fähigkeiten (Vertrag, Integrator)
+    "ort_orca": {"de": "Orca", "en": "Orca"},
+    "ort_terminal": {"de": "Terminal", "en": "Terminal"},
+    "ort_desktop": {"de": "Desktop", "en": "Desktop"},
+    "f_warnt": {"de": "warnt", "en": "warns"},
+    "f_stoppt": {"de": "stoppt", "en": "stops"},
+    "f_stoppt_nicht": {"de": "stoppt nicht", "en": "no stop"},
+    "f_setzt_fort": {"de": "setzt fort", "en": "continues"},
+    "f_nur_push": {"de": "nur Push", "en": "push only"},
+    "f_kein_fortsetzen": {"de": "kein Fortsetzen", "en": "no auto-continue"},
+    "f_trenner": {"de": " · ", "en": " · "},
+    "st_orca_fehlt": {"de": "Orca: nicht installiert – normale Terminals werden trotzdem überwacht",
+                      "en": "Orca: not installed – normal terminals are still watched"},
+    "st_sl_aktiv": {"de": "Claude-Füllstand: Statusline-Kette aktiv (zuletzt vor {dauer})",
+                    "en": "Claude usage: status line chain active (last update {dauer} ago)"},
+    "st_sl_aktiv_leer": {"de": "Claude-Füllstand: Statusline-Kette aktiv (noch keine Daten)",
+                         "en": "Claude usage: status line chain active (no data yet)"},
+    "st_sl_zurueck": {"de": "Statusline-Kette fehlt – die Statusline wurde ersetzt (z. B. von Orca). Füllstand kommt jetzt nur noch von "
+                            "Orca (falls installiert). Neu einrichten: ./install.sh",
+                      "en": "Status line chain missing – the status line was replaced (e.g. by Orca). Usage now comes from Orca "
+                            "only (if installed). Set up again: ./install.sh"},
+    "st_sl_aus": {"de": "Statusline-Kette nicht eingerichtet (./install.sh)",
+                  "en": "Status line chain not set up (./install.sh)"},
+    "sl_anzeige": {"de": "5h {p5} · Woche {pw}", "en": "5h {p5} · week {pw}"},
+    "push_weiter_befehl": {"de": "{n} außerhalb von Orca: weiter mit „weiter“ in der Sitzung oder {befehl}",
+                           "en": "{n} outside Orca: type \"continue\" in the session or run {befehl}"},
+    "app_statusline_fehlt": {"de": "Statusline-Kette fehlt – ./install.sh erneut ausführen",
+                             "en": "Status line chain missing – run ./install.sh again"},
+
+    # ---- v1.3 U1 (Statusline-Kette im Installer)
+    "inst_sl_ein": {"de": "Statusline-Kette eingetragen in {datei} (bisherige Statusline läuft weiter)",
+                    "en": "status line chain added to {datei} (the previous status line keeps running)"},
+    "inst_sl_gesichert": {"de": "   bisherige Statusline gesichert: {datei}", "en": "   previous status line saved: {datei}"},
+    "inst_sl_aus": {"de": "Statusline wiederhergestellt in {datei}", "en": "status line restored in {datei}"},
+    "inst_sl_fremd": {"de": "Statusline ist nicht (mehr) die des Wächters – nicht angefasst.",
+                      "en": "The status line is not (or no longer) the watchdog's – left untouched."},
+    "inst_sl_ohne_original": {"de": "Keine gesicherte Statusline gefunden – Eintrag des Wächters wird entfernt.",
+                              "en": "No saved status line found – removing the watchdog's entry."},
+    # ---- v1.3 U2 (Codex und Fortsetzen ohne Orca)
+    "log_codex_queue_dry": {"de": "DRY-RUN: würde per codex queue an {id} senden: {text}",
+                            "en": "DRY-RUN: would send via codex queue to {id}: {text}"},
+    "log_codex_queue_fehler": {"de": "codex queue an {id} fehlgeschlagen: {fehler}",
+                               "en": "codex queue to {id} failed: {fehler}"},
 }

@@ -1,0 +1,8 @@
+[
+ {"pid": 41001, "cwd": "/Users/alex/Projects/demo-app", "kind": "interactive", "startedAt": 1790390000000,
+  "sessionId": "11111111-2222-3333-4444-555555555555", "name": "demo-app", "status": "busy"},
+ {"pid": 41002, "cwd": "/Users/alex/Projects/website", "kind": "interactive", "startedAt": 1790380000000,
+  "sessionId": "66666666-7777-8888-9999-000000000000", "name": "website", "status": "idle"},
+ {"pid": 41003, "cwd": "/Users/alex/Projects/api", "kind": "background", "startedAt": 1790370000000,
+  "sessionId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "name": "api", "status": "idle"}
+]

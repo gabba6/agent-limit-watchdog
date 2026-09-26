@@ -18,9 +18,18 @@ class Kontext:
         self._agenten = None
         self._claude_agenten = claude_agenten
         self.orca_fehler = None
+        self._orca_vorhanden = None
         self.aktionen = []      # was dieser Durchlauf getan hat (für Log/Simulation)
 
+    def orca_vorhanden(self):
+        """Orca installiert? (Attrappen ohne vorhanden() gelten als installiert.)"""
+        if self._orca_vorhanden is None:
+            self._orca_vorhanden = bool(getattr(self.orca, "vorhanden", lambda: True)())
+        return self._orca_vorhanden
+
     def terminals(self):
+        if self._terminals is None and not self.orca_vorhanden():
+            self._terminals = []
         if self._terminals is None:
             try:
                 self._terminals = self.orca.terminals()
@@ -36,6 +45,8 @@ class Kontext:
                 and not t.get("orphaned") and t.get("writable", True)]
 
     def agenten(self):
+        if self._agenten is None and not self.orca_vorhanden():
+            self._agenten = {}
         if self._agenten is None:
             try:
                 self._agenten = self.orca.agenten()

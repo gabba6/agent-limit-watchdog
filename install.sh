@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Limit Watchdog – install (idempotent, safe to run again)
-#   ./install.sh          tests, backups, Claude hooks, ntfy topic, LaunchAgent
-#   ./install.sh hooks    only tests, backups and Claude hooks (no LaunchAgent)
+#   ./install.sh          tests, backups, Claude hooks + status line chain, ntfy topic, LaunchAgent
+#   ./install.sh hooks    only tests, backups, Claude hooks and status line chain (no LaunchAgent)
 #   ./install.sh app      tests, build the menu bar app, copy it to ~/Applications, app LaunchAgent
 # Undo: ./uninstall.sh
 set -euo pipefail
@@ -102,7 +102,10 @@ fi
 
 say "3/6 Claude-Hooks eintragen (Hooks anderer Tools bleiben unberührt) …" \
     "3/6 Adding Claude hooks (hooks of other tools stay untouched) …"
-(cd "$PROJ" && $PY -m lw.installer eintragen "$SETTINGS")
+(cd "$PROJ" && LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer eintragen "$SETTINGS")
+say "   Statusline-Kette (Füllstand ohne Orca; bisherige Statusline läuft weiter) …" \
+    "   Status line chain (usage without Orca; the previous status line keeps running) …"
+(cd "$PROJ" && LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer statusline-ein "$SETTINGS")
 $PY -c "import json,sys; json.load(open(sys.argv[1]))" "$SETTINGS" || {
   say "settings.json ungültig – stelle Backup wieder her" "settings.json invalid – restoring backup"
   cp -p "$LW/backups/claude-settings.json.$TS" "$SETTINGS"; exit 1; }

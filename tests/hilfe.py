@@ -42,10 +42,12 @@ class TempHome(unittest.TestCase):
 
     def setUp(self):
         self._alt = {n: os.environ.get(n) for n in ("LIMIT_WAECHTER_HOME", "LIMIT_WAECHTER_NOW",
-                                                    "LIMIT_WAECHTER_CONFIG")}
+                                                    "LIMIT_WAECHTER_CONFIG", "LIMIT_WAECHTER_CLAUDE_SETTINGS")}
         self.home = tempfile.mkdtemp(prefix="lw-test-")
         os.environ["LIMIT_WAECHTER_HOME"] = self.home
         os.environ["LIMIT_WAECHTER_CONFIG"] = os.path.join(self.home, "gibt-es-nicht.toml")
+        # status liest sonst ~/.claude/settings.json (Statusline-Zustand); Tests nie mit echten Dateien
+        os.environ["LIMIT_WAECHTER_CLAUDE_SETTINGS"] = os.path.join(self.home, "claude-settings.json")
         self.setze_zeit(self.NOW)
         self.k = copy.deepcopy(konfig.laden())
         # Die meisten Tests prüfen die deutschen Texte; test_sprache.py prüft Englisch.

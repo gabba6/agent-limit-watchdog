@@ -13,7 +13,8 @@ import sys
 import time
 import traceback
 
-from . import VERSION, bericht, konfig, melden, nacht, quellen, register, simulation, sprache, tick, util, wach
+from . import (VERSION, bericht, installer, konfig, melden, nacht, orte, quellen, register, simulation, sprache,
+               tick, util, wach)
 from .kontext import Kontext
 from .orca import Orca
 from .sprache import t
@@ -55,6 +56,52 @@ def _projekt(x):
     return os.path.basename(ordner) or None
 
 
+CLAUDE_SETTINGS = "~/.claude/settings.json"
+
+
+def statusline_info(settings_pfad=None):
+    """-> {'zustand': 'aktiv'|'zurueckgeschrieben'|'aus', 'stand': epoch|None}; settings.json wird nur gelesen.
+    Pfad per Parameter oder LIMIT_WAECHTER_CLAUDE_SETTINGS (Tests), sonst ~/.claude/settings.json."""
+    pfad = settings_pfad or os.environ.get("LIMIT_WAECHTER_CLAUDE_SETTINGS") or os.path.expanduser(CLAUDE_SETTINGS)
+    settings = util.lies_json(pfad, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    sl = quellen.claude_statusline(util.pfad(*quellen.STATUSLINE_DATEI))
+    return {"zustand": installer.statusline_zustand(settings), "stand": (sl or {}).get("stand")}
+
+
+def _orca_vorhanden(k, daten, orca):
+    if "orca_vorhanden" in daten:
+        return bool(daten["orca_vorhanden"])
+    if hasattr(orca, "vorhanden"):
+        return bool(orca.vorhanden())
+    return os.access(k["daten"]["orca"], os.X_OK)
+
+
+def automatisch(x, k, now, orca_ok=True):
+    """Wird diese wartende Sitzung nach dem Reset automatisch fortgesetzt (für die Anzeige)?
+    Außerhalb von Orca nur Codex per codex queue oder Claudes eingebaute Fortsetzung am harten Limit."""
+    f = orte.faehigkeiten(x, k, orca_ok)["fortsetzen"]
+    eingebaut = x.get("anbieter") == "claude" and x.get("status") in ("limit", "eingebaut_wartet")
+    if f != "ja" and not (f == "push" and eingebaut):
+        return False
+    nb = nacht.bis(x, now)
+    return bool(not k["fortsetzen"]["nur_mit_nachtmodus"] or (nb and nb > (x.get("fortsetzen_ab") or 0)))
+
+
+def faehigkeiten_text(f):
+    teile = [t("f_warnt"), t("f_stoppt" if f["stoppen"] == "ja" else "f_stoppt_nicht"),
+             t({"ja": "f_setzt_fort", "push": "f_nur_push"}.get(f["fortsetzen"], "f_kein_fortsetzen"))]
+    return t("f_trenner").join(teile)
+
+
+def _statusline_zeile(sl, now):
+    if sl["zustand"] == "aktiv":
+        return (t("st_sl_aktiv", dauer=util.dauer_text(now - sl["stand"])) if sl["stand"]
+                else t("st_sl_aktiv_leer"))
+    return t("st_sl_zurueck" if sl["zustand"] == "zurueckgeschrieben" else "st_sl_aus")
+
+
 def cmd_status(args, k):
     now = util.jetzt()
     orca = Orca(k["daten"]["orca"], dry_run=True)
@@ -67,14 +114,23 @@ def cmd_status(args, k):
     geladen = _launchagent_geladen(k["allgemein"]["launchagent_label"])
     topic = melden.topic_vorhanden(k["melden"]["ntfy_dienst"])
     w = wach.zustand()
+    orca_da = _orca_vorhanden(k, daten, orca)
+    sl = statusline_info()
     if args.json:
-        liste = [dict(x, nacht_bis=nacht.bis(x, now), projekt=_projekt(x), status_text=zustand_text(x.get("status")),
-                      wartet=x.get("status") in register.WARTET)
-                 for x in sitzungen]
+        liste = []
+        for x in sitzungen:
+            f = orte.faehigkeiten(x, k, daten["orca_ok"])
+            liste.append(dict(x, nacht_bis=nacht.bis(x, now), projekt=_projekt(x),
+                              status_text=zustand_text(x.get("status")), wartet=x.get("status") in register.WARTET,
+                              automatisch=automatisch(x, k, now, daten["orca_ok"]),
+                              ort=orte.ort(x), ort_text=t("ort_" + orte.ort(x)), faehigkeiten=f,
+                              faehigkeiten_text=faehigkeiten_text(f)))
         print(json.dumps({"version": VERSION, "jetzt": now, "sprache": sprache.AKTUELL,
                           "phasen": ph, "pausiert": pausiert, "pause_bis": pause_bis,
                           "letzter_tick": zustand.get("letzter_tick"), "launchagent": geladen, "ntfy_topic": topic,
-                          "orca_ok": daten["orca_ok"], "nacht": nacht.global_bis(now),
+                          "orca_ok": daten["orca_ok"],
+                          "orca_vorhanden": orca_da, "nur_orca": bool(k["allgemein"].get("nur_orca", False)),
+                          "statusline": sl, "nacht": nacht.global_bis(now),
                           "nur_mit_nachtmodus": bool(k["fortsetzen"]["nur_mit_nachtmodus"]),
                           "bericht_uhrzeit": str(k["bericht"]["uhrzeit"]),
                           "schwellen": {n: k["schwellen"][n] for n in SCHWELLEN},
@@ -90,7 +146,9 @@ def cmd_status(args, k):
     print(t("st_wachter", pause=pause, lauf=lauf, agent=t("st_geladen") if geladen else t("st_nicht_geladen")))
     gb = nacht.global_bis(now)
     print(t("n_global_an", zeit=util.uhrzeit(gb, now)) if gb else t("n_global_aus"))
-    if not daten["orca_ok"]:
+    if not orca_da:
+        print(t("st_orca_fehlt"))
+    elif not daten["orca_ok"]:
         print(t("st_orca_weg", fehler="; ".join(daten["fehler"])[:120]))
     for a in ("claude", "codex"):
         p = ph[a]
@@ -99,6 +157,7 @@ def cmd_status(args, k):
         print(t("st_zeile", name=NAME[a], f5=_fenster_text(p["pct5"], p["reset5"], now),
                 fw=_fenster_text(p["pctw"], p["resetw"], now), phase=t("phase_" + p["phase"]), alter=alter)
               + (t("st_reserve") if p["reserve_erreicht"] else ""))
+    print(_statusline_zeile(sl, now))
     s = k["schwellen"]
     print(t("st_schwellen", w=s["warnung"], s=s["stopp"], ww=s["woche_warnung"], ws=s["woche_stopp"],
             r=s["wochen_reserve"], ab=100 - s["wochen_reserve"]))
@@ -111,11 +170,11 @@ def cmd_status(args, k):
         extra = ""
         nb = nacht.bis(x, now)
         if x.get("status") in register.WARTET and x.get("fortsetzen_ab"):
-            automatisch = not k["fortsetzen"]["nur_mit_nachtmodus"] or (nb and nb > x["fortsetzen_ab"])
-            extra = t("st_ab" if automatisch else "st_weiter_noetig", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
+            extra = t("st_ab" if automatisch(x, k, now, daten["orca_ok"]) else "st_weiter_noetig", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
         if nb:
             extra += t("st_nacht", zeit=util.uhrzeit(nb, now))
-        print(f"  {x['anbieter']:6} {str(x['id'])[:8]} {os.path.basename(x.get('cwd') or '?')[:28]:28} "
+        print(f"  {x['anbieter']:6} {str(x['id'])[:8]} {t('ort_' + orte.ort(x))[:8]:8} "
+              f"{os.path.basename(x.get('cwd') or '?')[:28]:28} "
               f"{zustand_text(x.get('status')):26}{extra}")
     if not any(x.get("status") != "aktiv" for x in frisch) and not args.alle:
         print(t("st_keine_wartet"))

@@ -2,7 +2,8 @@
 """Claude-Code-Hook des Limit-Wächters (zusätzlich zu Orcas Hooks in ~/.claude/settings.json).
 
 Ereignisse:
-  SessionStart / UserPromptSubmit  Sitzung <-> Orca-Terminal registrieren; Reserve-Sperre der eingebauten Fortsetzung;
+  SessionStart / UserPromptSubmit  Sitzung registrieren (Ort orca/terminal/desktop, in Orca mit Terminal-Handle);
+                                    Reserve-Sperre der eingebauten Fortsetzung;
                                     '#nacht' schaltet den Nachtmodus (block, geht nicht ans Modell); ohne Nachtmodus
                                     wird Claudes eingebaute Fortsetzung gesperrt (v1.1, [fortsetzen] nur_mit_nachtmodus)
   PreToolUse (Agent|Task|Workflow)  im STOPP/LIMIT: deny (keine neuen Subagents/Workflows)
@@ -11,8 +12,11 @@ Ereignisse:
   StopFailure (rate_limit)          Sitzung am Limit, Reset aus dem Transcript (quotaLimits)
   Notification (quota_auto_resume_*, permission_prompt), PermissionDenied, SessionEnd: Register/Bericht
 
-Greift nur in Orca-Terminals ein (ORCA_TERMINAL_HANDLE gesetzt) und nie, wenn der Wächter pausiert ist
-oder sein Zustand veraltet ist. Fehler führen nie zu einer Blockade: dann gibt der Hook nichts aus.
+Greift seit 1.3 überall ein, wo Claude Code auf diesem Mac läuft (Orca, Terminal, IDE, vermutlich Desktop; nicht
+bei Claude Code im Web, siehe lw/orte.py). Mit [allgemein] nur_orca = true (in state/current.json) nur in
+Orca-Terminals wie bis 1.2. Außerhalb von Orca werden keine Orca-Felder gespeichert und der Sicherungsauftrag
+verspricht keine automatische Fortsetzung. Nie, wenn der Wächter pausiert ist oder sein Zustand veraltet ist.
+Fehler führen nie zu einer Blockade: dann gibt der Hook nichts aus.
 """
 
 import json
@@ -22,7 +26,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lw import nacht, phasen, quellen, register, sprache, texte, util  # noqa: E402
+from lw import nacht, orte, phasen, quellen, register, sprache, texte, util  # noqa: E402
 from lw.sprache import t  # noqa: E402
 
 GESPERRTE_WERKZEUGE = {"Agent", "Task", "Workflow"}
@@ -48,32 +52,45 @@ def zustand(sid, now):
     return p, "aktuell", cur
 
 
-def _basis(payload, env):
+ORCA_FELDER = ("terminal", "pane_key", "worktree_id", "worktree")
+
+
+def _basis(payload, env, ort):
     def setzen(d):
+        d["ort"] = ort
+        if ort != "orca":                            # nie ein altes Orca-Handle ansprechen
+            for feld in ORCA_FELDER:
+                d.pop(feld, None)
         for feld, wert in (("cwd", payload.get("cwd")), ("transcript", payload.get("transcript_path")),
                            ("modus", payload.get("permission_mode")),
-                           ("terminal", env.get("ORCA_TERMINAL_HANDLE")), ("pane_key", env.get("ORCA_PANE_KEY")),
                            ("entrypoint", env.get("CLAUDE_CODE_ENTRYPOINT"))):
             if wert:
                 d[feld] = wert
-        wt = env.get("ORCA_WORKTREE_ID")
-        if wt:
-            d["worktree_id"] = wt
-            d["worktree"] = wt.split("::", 1)[-1]
+        if ort == "orca":
+            for feld, wert in (("terminal", env.get("ORCA_TERMINAL_HANDLE")), ("pane_key", env.get("ORCA_PANE_KEY"))):
+                if wert:
+                    d[feld] = wert
+            wt = env.get("ORCA_WORKTREE_ID")
+            if wt:
+                d["worktree_id"] = wt
+                d["worktree"] = wt.split("::", 1)[-1]
     return setzen
 
 
 def verarbeiten(payload, env, now):
     ev = payload.get("hook_event_name") or ""
     sid = payload.get("session_id")
-    if not sid or not env.get("ORCA_TERMINAL_HANDLE"):
-        return None                                  # v1: nur Orca-Terminals
+    ort = orte.ort_claude(env)
+    if not sid or not ort:
+        return None                                  # z. B. Claude Code im Web
     unter = bool(payload.get("agent_id"))            # Subagent-Aufruf
     p, grund, cur = zustand(sid, now)
+    if cur.get("nur_orca") and ort != "orca":
+        return None                                  # nur_orca = true: Verhalten bis 1.2
     sprache.setzen(cur.get("sprache") or "en", cur.get("name") or "")
     phase = (p or {}).get("phase", "ok")
     puffer = cur.get("puffer_s", STANDARD_PUFFER_S)
-    basis = _basis(payload, env)
+    basis = _basis(payload, env, ort)
 
     if ev == "PreToolUse":
         if p and phase in ("stopp", "limit") and payload.get("tool_name") in GESPERRTE_WERKZEUGE:
@@ -192,7 +209,9 @@ def verarbeiten(payload, env, now):
         register.aktualisieren("claude", sid, stop)
         if ergebnis.get("block"):
             util.log(t("log_hook_block", sid=sid[:8]))
-            automatisch = not cur.get("nur_nacht") or nacht.aktiv(register.lesen("claude", sid), now)
+            # außerhalb von Orca setzt nach einem Wächter-Stopp niemand automatisch fort (Vertrag 6)
+            automatisch = ort == "orca" and (not cur.get("nur_nacht")
+                                             or nacht.aktiv(register.lesen("claude", sid), now))
             return {"decision": "block", "reason": texte.sicherungsauftrag(p, now, automatisch)}
         return None
 

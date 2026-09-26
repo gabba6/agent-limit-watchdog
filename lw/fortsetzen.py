@@ -7,13 +7,17 @@ Reihenfolge je wartender Sitzung (nach resets_at + Puffer, Wochenreserve beachte
   Terminal ruht (leere Eingabe)      -> Fortsetzungsprompt senden
   Terminal fehlt, Session-ID bekannt -> neues Orca-Terminal mit claude --resume / codex resume
 Höchstens max_pro_fenster automatische Fortsetzungen je Sitzung und Fenster, danach Push.
+
+Außerhalb von Orca (v1.3, Ort terminal/desktop) wird nie getippt, nie ein Bildschirm gelesen und nie ein
+Terminal geöffnet: Codex im Terminal per `codex queue` (wenn eingeschaltet), sonst Status wartet_auf_weiter
+und Push mit Kopierbefehl.
 """
 
 import os
 import shlex
 import subprocess
 
-from . import bildschirm, register, texte, util
+from . import bildschirm, orte, quellen, register, texte, util
 from .sprache import t
 from .orca import OrcaFehler, pane_key
 
@@ -67,7 +71,7 @@ def faellig(s, phase, k, now):
     if phase["phase"] in ("stopp", "limit"):
         return False, f"{phase['anbieter']} noch in Phase {phase['phase']}"
     if s["anbieter"] == "claude" and s["status"] in ("limit", "stale", "disabled", "eingebaut_wartet") \
-            and f["claude_limit_resume"] == "orca":
+            and f["claude_limit_resume"] == "orca" and orte.ort(s) == "orca":
         return False, "Claude-Fortsetzung am Limit übernimmt Orca"
     if s["anbieter"] == "claude" and s["status"] == "limit" \
             and now < (s.get("reset") or 0) + f["claude_eingebaut_karenz_minuten"] * 60:
@@ -93,6 +97,17 @@ def bearbeiten(ctx, s, phase):
         ctx.melder.senden(t("push_aufgegeben", n=texte.NAME[s["anbieter"]], max=f["max_pro_fenster"]), prio=4, schluessel=f"aufgegeben:{s['id']}:{fid}")
         return "aufgegeben"
 
+    if orte.ort(s) != "orca" or not ctx.orca_vorhanden():
+        if s["anbieter"] == "codex" and orte.ort(s) == "terminal" and orte.codex_queue_an(k):
+            info = _codex_info(ctx, s)
+            if info and (info.get("laeuft") or (info.get("letzte_aktivitaet") or 0) > (s.get("reset") or now)):
+                _setze(s, "fortgesetzt", "läuft bereits (von Hand)", geprueft=True)
+                return "laeuft"
+            register.aktualisieren(s["anbieter"], s["id"], lambda d: register.zaehle_versuch(d, fid))
+            if _codex_queue(ctx, s, f["pruefen_nach_minuten"] * 60):
+                return "fortgesetzt"
+        auf_weiter_setzen(s, "außerhalb von Orca: wartet auf weiter")
+        return "weiter"
     term = finde_terminal(ctx, s)
     if term is not None:
         return _im_terminal(ctx, s, term)
@@ -164,15 +179,37 @@ def _im_terminal(ctx, s, term):
                       "unbekannt")
 
 
-def _codex_queue(ctx, s):
-    befehl = [ctx.k["fortsetzen"]["codex_befehl"], "queue", "--thread", s["id"], "--message", texte.fortsetzungsprompt()]
+def auf_weiter_setzen(s, notiz="ohne Nachtmodus: wartet auf weiter"):
+    """Nichts senden, nur vermerken (der Nutzer tippt selbst "weiter"; Push kommt gebündelt vom Tick)."""
+    def aenderung(d):
+        d["status"] = "wartet_auf_weiter"
+        d["weiter_gemeldet"] = False
+    register.aktualisieren(s["anbieter"], s["id"], aenderung, notiz)
+    util.ereignis("wartet_auf_weiter", anbieter=s["anbieter"], sitzung=s["id"], cwd=s.get("cwd"))
+
+
+def codex_queue(ctx, sid, text):
+    """Nachricht per `codex queue` an einen bestehenden Codex-Thread (Argumentliste, keine Shell).
+    Im Dry-Run nur protokollieren (wie orca.senden). -> True bei Exitcode 0."""
+    befehl = [ctx.k["fortsetzen"]["codex_befehl"], "queue", "--thread", sid, "--message", text]
+    if ctx.dry_run:
+        util.log(t("log_codex_queue_dry", id=str(sid)[:8], text=repr(text[:60])))
+        return True
     try:
         r = subprocess.run(befehl, capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as e:
+        util.log(t("log_codex_queue_fehler", id=str(sid)[:8], fehler=e))
         return False
     if r.returncode != 0:
+        util.log(t("log_codex_queue_fehler", id=str(sid)[:8], fehler=(r.stderr or "").strip()[:200] or r.returncode))
         return False
-    _setze(s, "fortgesetzt", "codex queue", pruefen_ab=ctx.now + 120, geprueft=False)
+    return True
+
+
+def _codex_queue(ctx, s, pruefen_s=120):
+    if not codex_queue(ctx, s["id"], texte.fortsetzungsprompt()):
+        return False
+    _setze(s, "fortgesetzt", "codex queue", pruefen_ab=ctx.now + pruefen_s, geprueft=False)
     util.ereignis("fortgesetzt", anbieter="codex", sitzung=s["id"], cwd=s.get("cwd"), weg="codex queue")
     ctx.aktion(t("aktion_fortgesetzt", s=_kurz(s), weg="codex queue"))
     return True
@@ -221,6 +258,8 @@ def _neu_starten(ctx, s):
 
 def pruefen(ctx, s):
     """Ein paar Minuten nach der Fortsetzung nachsehen, ob der Agent arbeitet oder an einer Abfrage hängt."""
+    if orte.ort(s) != "orca":
+        return _pruefen_rollout(ctx, s)
     term = finde_terminal(ctx, s)
     if term is None:
         if ctx.now - (s.get("status_seit") or ctx.now) > 600:
@@ -242,3 +281,25 @@ def pruefen(ctx, s):
         ctx.melder.senden(t("push_haengt", n=texte.NAME[s["anbieter"]]), prio=4, schluessel=f"haengt:{s['id']}:{s.get('fenster_id')}")
     else:
         _setze(s, "fortgesetzt", f"Prüfung: {grund}", geprueft=True, terminal=term["handle"])
+
+
+def _codex_info(ctx, s):
+    """rollout-Info des Codex-Threads oder None (Datei liegt im Ordner ihres Erstelldatums, deshalb 8 Tage)."""
+    ende = f"{s['id']}.jsonl"
+    datei = next((p for p in quellen.rollout_dateien(ctx.k["daten"]["codex_sessions"], ctx.now)
+                  if p.endswith(ende)), None)
+    return quellen.codex_thread(datei) if datei else None
+
+
+def _pruefen_rollout(ctx, s):
+    """Außerhalb von Orca (codex queue): neue Aktivität in der rollout-Datei nach der Fortsetzung = arbeitet."""
+    seit = s.get("status_seit") or ctx.now
+    if s["anbieter"] == "codex":
+        info = _codex_info(ctx, s)
+        if info and (info.get("letzte_aktivitaet") or 0) > seit:
+            _setze(s, "fortgesetzt", "Prüfung: arbeitet", geprueft=True)
+            return
+    if ctx.now - seit > 600:
+        _setze(s, "fortgesetzt", "keine Aktivität nach Fortsetzung", geprueft=True)
+        ctx.melder.senden(t("push_verloren", n=texte.NAME[s["anbieter"]]), prio=4,
+                          schluessel=f"verloren:{s['id']}:{s.get('fenster_id')}")

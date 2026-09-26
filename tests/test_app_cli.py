@@ -5,11 +5,13 @@ import io
 import json
 import os
 import stat
+import unittest.mock
+import subprocess
 import unittest
 
 from hilfe import TempHome, lies_fixture_json
 
-from lw import cli, konfig, register, sprache, util
+from lw import VERSION, cli, installer, konfig, register, sprache, util
 
 APP_SCHLUESSEL = """app_titel app_version app_aktiv app_waechter_aus app_kein_tick app_letzter_tick app_orca_fehlt
 app_fuenf app_woche app_reset app_keine_daten app_veraltet app_reserve_erreicht app_pause app_pausiert
@@ -28,6 +30,17 @@ class CliBasis(TempHome):
             f.write('[allgemein]\nsprache = "de"\n')
         os.environ["LIMIT_WAECHTER_CONFIG"] = self.konfig
         self.lokal = konfig.lokal_pfad(self.konfig)
+        # Nie das echte ~/.claude lesen: Statusline-Zustand aus einer Temp-settings.json.
+        self._alt_settings = os.environ.get("LIMIT_WAECHTER_CLAUDE_SETTINGS")
+        self.settings = os.path.join(self.home, "claude-settings.json")
+        os.environ["LIMIT_WAECHTER_CLAUDE_SETTINGS"] = self.settings
+
+    def tearDown(self):
+        if self._alt_settings is None:
+            os.environ.pop("LIMIT_WAECHTER_CLAUDE_SETTINGS", None)
+        else:
+            os.environ["LIMIT_WAECHTER_CLAUDE_SETTINGS"] = self._alt_settings
+        super().tearDown()
 
     def cli(self, *args):
         puffer = io.StringIO()
@@ -59,7 +72,7 @@ class StatusJsonTest(CliBasis):
         s_keys = set().union(*(set(x) for x in muster["sitzungen"])) - {"fortsetzen_ab"}
         for x in d["sitzungen"]:
             self.assertLessEqual(s_keys - {"cwd"}, set(x))
-        self.assertEqual(d["version"], "1.2")
+        self.assertEqual(d["version"], VERSION)
         self.assertEqual(d["sprache"], "de")
         self.assertEqual(d["letzter_tick"], self.now - 30)
         self.assertEqual(d["jetzt"], self.now)
@@ -79,6 +92,113 @@ class StatusJsonTest(CliBasis):
         d = json.loads(self.cli("status", "--json")[1])
         self.assertTrue(d["pausiert"])
         self.assertEqual(d["pause_bis"], self.now + 1800)
+
+
+class OrteUndStatuslineTest(CliBasis):
+    """v1.3: ort, faehigkeiten, orca_vorhanden, nur_orca, statusline in status --json und im Text."""
+
+    def sitzungen_anlegen(self):
+        register.aktualisieren("claude", "11111111-orca", lambda d: d.update(cwd="/p/a", status="gestoppt",
+                                                                            zuletzt=self.now, ort="orca",
+                                                                            terminal="term-1"))
+        register.aktualisieren("claude", "22222222-term", lambda d: d.update(cwd="/p/b", status="gestoppt",
+                                                                            zuletzt=self.now, ort="terminal"))
+        register.aktualisieren("codex", "33333333-desk", lambda d: d.update(cwd="/p/c", status="wartet_auf_weiter",
+                                                                           zuletzt=self.now, ort="desktop"))
+        register.aktualisieren("claude", "44444444-alt", lambda d: d.update(cwd="/p/d", status="aktiv",
+                                                                           zuletzt=self.now, pane_key="x:1"))
+
+    def status_json(self, orca_da=False):
+        with unittest.mock.patch.object(cli, "_orca_vorhanden", return_value=orca_da):
+            return json.loads(self.cli("status", "--json")[1])
+
+    def test_sitzungsfelder(self):
+        self.sitzungen_anlegen()
+        d = self.status_json()
+        self.assertFalse(d["orca_vorhanden"])
+        self.assertFalse(d["nur_orca"])
+        n = {x["id"]: x for x in d["sitzungen"]}
+        self.assertEqual([n[i]["ort"] for i in ("11111111-orca", "22222222-term", "33333333-desk", "44444444-alt")],
+                         ["orca", "terminal", "desktop", "orca"])
+        self.assertEqual(n["22222222-term"]["ort_text"], "Terminal")
+        self.assertEqual(n["22222222-term"]["faehigkeiten"], {"warnen": "ja", "stoppen": "ja", "fortsetzen": "push"})
+        self.assertEqual(n["22222222-term"]["faehigkeiten_text"], "warnt · stoppt · nur Push")
+        self.assertEqual(n["33333333-desk"]["faehigkeiten"]["stoppen"], "nein")
+        self.assertEqual(n["33333333-desk"]["faehigkeiten_text"], "warnt · stoppt nicht · nur Push")
+        self.assertIn(n["11111111-orca"]["faehigkeiten"]["fortsetzen"], ("ja", "push"))
+
+    def test_englisch(self):
+        self.sprache_setzen("en")
+        self.sitzungen_anlegen()
+        n = {x["id"]: x for x in self.status_json()["sitzungen"]}
+        self.assertEqual(n["33333333-desk"]["ort_text"], "Desktop")
+        self.assertEqual(n["33333333-desk"]["faehigkeiten_text"], "warns · no stop · push only")
+
+    def test_automatisch_nur_wo_der_waechter_fortsetzt(self):
+        self.k["fortsetzen"]["nur_mit_nachtmodus"] = False
+        orca = {"anbieter": "claude", "status": "gestoppt", "ort": "orca", "fortsetzen_ab": self.now + 60}
+        term = dict(orca, ort="terminal")
+        self.assertTrue(cli.automatisch(orca, self.k, self.now))
+        self.assertFalse(cli.automatisch(term, self.k, self.now), "nach Wächter-Stopp setzt dort niemand fort")
+        self.assertTrue(cli.automatisch(dict(term, status="limit"), self.k, self.now), "eingebaute Fortsetzung")
+        self.assertFalse(cli.automatisch(orca, self.k, self.now, orca_ok=False))
+        self.k["fortsetzen"]["nur_mit_nachtmodus"] = True
+        self.assertFalse(cli.automatisch(orca, self.k, self.now), "ohne Nachtmodus")
+        self.assertTrue(cli.automatisch(dict(orca, nacht_bis=self.now + 3600), self.k, self.now))
+
+    def test_faehigkeiten_text_kein_fortsetzen(self):
+        self.assertEqual(cli.faehigkeiten_text({"warnen": "ja", "stoppen": "ja", "fortsetzen": "nein"}),
+                         "warnt · stoppt · kein Fortsetzen")
+
+    def test_statusline_zustaende(self):
+        self.assertEqual(cli.statusline_info(), {"zustand": "aus", "stand": None})       # keine settings.json
+        with open(self.settings, "w", encoding="utf-8") as f:
+            f.write("{kaputt")
+        self.assertEqual(cli.statusline_info()["zustand"], "aus")
+        util.schreib_json(self.settings, {"statusLine": {"type": "command",
+                                                         "command": "/usr/bin/python3 x " + installer.SL_MARKER}})
+        self.assertEqual(cli.statusline_info(), {"zustand": "aktiv", "stand": None})
+        util.schreib_json(util.pfad("state", "statusline.json"),
+                          {"version": 1, "stand": self.now - 60, "fuenf": {"pct": 10, "reset": self.now + 99},
+                           "woche": None})
+        self.assertEqual(cli.statusline_info(), {"zustand": "aktiv", "stand": self.now - 60})
+        self.assertEqual(self.status_json()["statusline"], {"zustand": "aktiv", "stand": self.now - 60})
+        util.schreib_json(self.settings, {"statusLine": {"type": "command", "command": "anderes"}})
+        util.schreib_json(util.pfad(*installer.SL_ORIGINAL), {"version": 1, "gesichert": self.now, "statusLine": None})
+        self.assertEqual(cli.statusline_info(self.settings)["zustand"], "zurueckgeschrieben")
+
+    def test_textausgabe(self):
+        self.sitzungen_anlegen()
+        with unittest.mock.patch.object(cli, "_orca_vorhanden", return_value=False):
+            out = self.cli("status")[1]
+        self.assertIn(sprache.TEXTE["st_orca_fehlt"]["de"], out)
+        self.assertIn(sprache.TEXTE["st_sl_aus"]["de"], out)
+        self.assertIn("Terminal", out)
+        self.assertIn("Desktop", out)
+        util.schreib_json(self.settings, {"statusLine": {"command": "x " + installer.SL_MARKER}})
+        util.schreib_json(util.pfad("state", "statusline.json"),
+                          {"version": 1, "stand": self.now - 120, "fuenf": {"pct": 10, "reset": None}})
+        with unittest.mock.patch.object(cli, "_orca_vorhanden", return_value=True):
+            out = self.cli("status")[1]
+        self.assertNotIn(sprache.TEXTE["st_orca_fehlt"]["de"], out)
+        self.assertIn("Statusline-Kette aktiv (zuletzt vor", out)
+
+
+class AppSelbsttestTest(unittest.TestCase):
+    APP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "app", "build", "Limit-Waechter.app", "Contents", "MacOS", "LimitWaechter")
+
+    def test_fixture_mit_orten(self):
+        d = lies_fixture_json(os.path.join("app", "status.json"))
+        self.assertEqual({x.get("ort") for x in d["sitzungen"]} - {None}, {"orca", "terminal", "desktop"})
+        self.assertIn(d["statusline"]["zustand"], ("aktiv", "zurueckgeschrieben", "aus"))
+        if not os.path.exists(self.APP):
+            self.skipTest("App nicht gebaut (app/build.sh)")
+        r = subprocess.run([self.APP, "--selbsttest", os.path.join(os.path.dirname(self.APP), "..", "..", "..", "..",
+                                                                    "..", "tests", "fixtures", "app", "status.json")],
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("orte: orca,terminal,desktop", r.stdout)
 
 
 class LokalSetzenTest(CliBasis):

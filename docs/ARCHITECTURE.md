@@ -10,7 +10,9 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 | Part | File | Runs | Job |
 |---|---|---|---|
 | Tick | `waechter.py tick` → `lw/tick.py` | LaunchAgent, every 60 s (~0.4 s) | collect usage, compute phases, notify, stop Codex, continue sessions, keep the Mac awake, morning report |
-| Claude hook | `hooks/claude_hook.py` | Claude Code, on hook events | map session ↔ Orca terminal, deny new subagents, checkpoint request, record limit errors |
+| Claude hook | `hooks/claude_hook.py` | Claude Code, on hook events | register session with its location (and Orca terminal, if any), deny new subagents, checkpoint request, record limit errors |
+| Status line chain | `hooks/statusline.py` | Claude Code, as `statusLine` command | store Claude's `rate_limits` in `state/statusline.json` (throttled, atomic), then run the original status line unchanged |
+| Locations | `lw/orte.py` | tick, hook, CLI | location of a session (`orca` / `terminal` / `desktop`) and what the watchdog can do there (`faehigkeiten`, computed, never stored) |
 | Night mode | `lw/nacht.py` | tick, hook, CLI | who is continued after the reset: `nacht_bis` per session, `state/nacht.json` for all; ends at the report time |
 | State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks, plus `nur_nacht` / `nacht_ende`), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `log/`, `berichte/` (reports), `backups/` |
 | CLI | `lw/cli.py` | you, the app | `status`, `night`, `pause`, `thresholds`, `report`, `simulate`, `ntfy-setup`, … |
@@ -20,8 +22,10 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 
 | Source | Gives | Notes |
 |---|---|---|
-| `orca account list --json` → `result.rateLimits.claude/codex` | 5-hour and weekly `usedPercent`, `resetsAt` | undocumented Orca field, read tolerantly; Claude is updated live through the status line while sessions run |
-| `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex `rate_limits` snapshots, `task_complete` with `usage_limit_exceeded` | fresher than Orca for Codex; the reset time is matched against the “try again at …” message |
+| `orca account list --json` → `result.rateLimits.claude/codex` | 5-hour and weekly `usedPercent`, `resetsAt` | optional (only if Orca is installed); undocumented Orca field, read tolerantly |
+| `state/statusline.json` (written by `hooks/statusline.py`) | Claude 5-hour and weekly `used_percentage`, `resets_at` | from Claude's own status line input; for Claude the **fresher** of Orca and status line wins (tie: Orca); `phasen.claude.quelle` says which |
+| `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex `rate_limits` snapshots, `task_complete` with `usage_limit_exceeded`, `session_meta.originator` | fresher than Orca for Codex; the reset time is matched against the “try again at …” message; outside Orca also the source of Codex sessions |
+| `claude agents --json` | running Claude sessions (pid, cwd, session id, idle/busy) | before a resume, to avoid starting a session that already runs elsewhere |
 | Claude transcript (`quotaLimits`) | exact `resetsAt` and window type after a limit error | read by the `StopFailure` hook |
 | `orca terminal list` / `worktree ps` / `terminal read --screen` | terminals, agent state, the rendered screen | handles are never cached; looked up every tick |
 | Orca's `agent-hooks/last-status.json` | pane → provider session id | maps Codex terminals to their thread |
@@ -60,7 +64,15 @@ continuation.
 | `Notification` | `quota_auto_resume_*`, `permission_prompt` | track Claude's built-in auto-continue (fired / stale / disabled) |
 | `PermissionDenied`, `SessionEnd` | – | morning report / mark ended sessions (never auto-continued) |
 
-Guards: the hook acts only when `ORCA_TERMINAL_HANDLE` is set, never while paused, never if `current.json` is
+Location: on every event the hook sets `ort` from its environment (`lw/orte.py`): `ORCA_TERMINAL_HANDLE` → `orca`;
+`CLAUDE_CODE_ENTRYPOINT` `claude-desktop`/`desktop`/`local-agent` → `desktop` (probably; not confirmed); `remote`
+(Claude Code on the web) and headless runs (`sdk-cli` = `claude -p`, `sdk-ts`, `sdk-py`, `mcp`) → ignored outside Orca;
+anything else → `terminal`. Outside Orca, stale Orca fields (`terminal`, `pane_key`, `worktree_id`) are
+removed so an old handle is never addressed. The checkpoint request says whether the session will be continued
+automatically (outside Orca: no).
+
+Guards: with `nur_orca = true` (read from `current.json`) the hook acts only when `ORCA_TERMINAL_HANDLE` is set
+(1.2 behaviour); never while paused, never if `current.json` is
 older than 10 minutes, never after the window's reset time. Any exception makes it print nothing (Claude
 continues normally). Subagent calls (`agent_id` present) are ignored except for the subagent/workflow deny.
 
@@ -83,6 +95,12 @@ get 5 more minutes so Claude's built-in auto-continue can go first):
    with `claude --resume <id> --permission-mode auto "<prompt>"` / `codex resume <id> --sandbox workspace-write "<prompt>"`
 6. a few minutes later: check whether the continued session is stuck at a prompt → notify
 
+**Outside Orca** (location `terminal`/`desktop`) the watchdog never types, never reads a screen, never opens a
+terminal or window (no tmux, no AppleScript). Claude: only Claude's built-in auto-continue (allowed with night
+mode, blocked without); a due session that is still waiting after its grace period becomes `wartet_auf_weiter` and
+gets a push with a command to copy (`claude --resume <id>`), never a restart. Codex: push with `codex resume <id>`,
+unless `codex_queue` is on (below).
+
 At most two continuations per tick (staggered). While a continuation is pending within the next 12 hours the
 tick keeps `caffeinate -i -s` running (only for sessions that will actually be continued) until reset + 15 minutes and, at night, warns if the Mac would sleep with
 the lid closed or runs on battery.
@@ -93,6 +111,15 @@ Codex CLI has no hook that knows about usage limits, and new Codex hooks require
 which could block a session at night. So Codex is handled entirely from the tick: in the *Stop* phase, working
 Codex terminals get one short message (after a screen check); limit errors are read from the rollout files;
 continuing works like for Claude. If Orca explicitly rejects a send, `codex queue --thread <id>` is the fallback.
+
+**Outside Orca (1.3):** candidates are rollout files changed in the last 6 hours (at most 20) that were not mapped
+to an Orca terminal in this tick; `session_meta.originator` decides: `codex-tui` → `terminal`, `Codex Desktop` →
+`desktop`; `codex_exec`, the Chrome extension and subagents are not watched. A registered `orca` session keeps its
+location while Orca is installed but unreachable. By default these sessions are only warned about and get a push.
+With `[fortsetzen] codex_queue = true` (experimental, not verified live: Codex asks for a permanent folder trust,
+so the live test was not possible) a `terminal` session gets the stop message and, with night mode, the
+continuation via `codex queue --thread <id> --message <text>` (argument list, no shell, 60 s timeout); progress is
+checked in the rollout file. The Codex app has its own app server, so it is display/warning only.
 
 ## Menu bar app (1.2)
 
@@ -110,6 +137,9 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
 - **Contract `status --json`:** besides the older keys it has `version`, `jetzt`, `sprache`, `pause_bis`,
   `letzter_tick`, `nur_mit_nachtmodus`, `bericht_uhrzeit`, `schwellen` {`warnung`, `stopp`, `woche_warnung`,
   `woche_stopp`, `wochen_reserve`} and per session `projekt` (folder name of cwd/worktree) and `status_text`.
+  Since 1.3 also `orca_vorhanden`, `nur_orca`, `statusline` {`zustand`: `aktiv`|`zurueckgeschrieben`|`aus`, `stand`}
+  and per session `ort`, `ort_text`, `faehigkeiten` {`warnen`, `stoppen`, `fortsetzen`: `ja`|`nein`|`push`},
+  `faehigkeiten_text` and `automatisch` (will the watchdog really continue it by itself?).
   Example: `tests/fixtures/app/status.json`. The app decodes every field as optional and drops broken entries.
 - **Texts:** the hidden command `app-texte` returns `{"sprache", "texte"}` with all keys starting with `app_`,
   `phase_`, `z_` from `lw/sprache.py`, placeholders unreplaced; the app fills `{name}` itself and formats
@@ -139,3 +169,12 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
   (Documents, Desktop, iCloud, …); an Orca terminal that already has access handles those.
 - **The app is a thin client (1.2):** one source of truth (the CLI), no second implementation of rules or texts.
 - **One file per session:** hooks from many sessions write in parallel without locking each other out.
+- **Orca optional, never type outside it (1.3):** without Orca there is no reliable way to read a screen, so the
+  watchdog only uses official channels there: hooks, Claude's built-in auto-continue, optionally `codex queue`.
+  What a session gets is computed in one place (`orte.faehigkeiten`) and the tick only does what it says.
+- **Status line: only wrap, never replace (1.3):** the user's status line keeps running unchanged; the original is
+  saved in `state/statusline-original.json` (0600, plus a copy in `backups/`) and restored by `uninstall.sh`. Our
+  command is marked with `# limit-watchdog-statusline` and must **not** contain `agent-hooks/claude-statusline`:
+  Orca treats a `statusLine` command containing that string as its own (“managed”) and overwrites it, while it
+  leaves other (“user”) commands alone. That is also why the original lives in a file, not in the command. If
+  the entry is replaced anyway, `status`/the app show it (`zurueckgeschrieben`) and usage falls back to Orca.

@@ -9,6 +9,8 @@
 sprache = "en"                         # language of notifications, CLI output and hook texts: "en" | "de"
 name = ""                              # optional: your name, used in the texts the hooks show to Claude
 launchagent_label = "local.limit-waechter"
+nur_orca = false                       # true: only watch sessions in Orca terminals (behaviour up to 1.2);
+                                       # false: also normal terminals and desktop apps where hooks reach them
 
 [schwellen]                            # thresholds
 warnung = 80           # % of the 5-hour window: notification
@@ -32,6 +34,8 @@ claude_modus = "auto"                  # permission mode for sessions restarted 
 codex_befehl = ""                      # path to codex (empty = find automatically)
 codex_sandbox = "workspace-write"
 codex_stopp_senden = true              # in the stop phase, send a short message to working Codex terminals
+codex_queue = false                    # experimental, not verified yet: Codex outside Orca gets the stop message and
+                                       # the continuation via `codex queue` (text only); false = only warn and notify
 pruefen_nach_minuten = 2               # check a few minutes later whether the continuation got stuck
 
 [daten]                                # data sources

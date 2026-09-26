@@ -32,6 +32,8 @@ if let i = argumente.firstIndex(of: "--selbsttest") {
             print("\(a): phase=\(p?.phaseName ?? "-") 5h=\(p5) woche=\(pw)")
         }
         print("sitzungen: \(st.sitzungen?.count ?? 0) (aktuell \(st.aktuelleSitzungen.count))")
+        let orte = (st.sitzungen ?? []).map { $0.ort ?? "-" }.joined(separator: ",")
+        print("orca: \(st.orca_vorhanden.map { $0 ? "ja" : "nein" } ?? "-")  statusline: \(st.statusline?.zustand ?? "-")  orte: \(orte)")
         print("nachtmodus: \(st.nacht != nil ? "an" : "aus")  pausiert: \(st.pausiert == true)")
         if let sw = st.schwellen {
             print("schwellen: \(sw.warnung)/\(sw.stopp) woche \(sw.woche_warnung)/\(sw.woche_stopp) reserve \(sw.wochen_reserve)")
