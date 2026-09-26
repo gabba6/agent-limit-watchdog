@@ -57,6 +57,9 @@ Hard rules (never break them):
      and confirm that only lines were added and no existing hook was changed.
    - Confirm that ~/.codex/hooks.json is unchanged.
    - Run `./waechter.py status` and check that the LaunchAgent is loaded and the last tick is recent.
+   Optional menu bar app: ask me whether I want it. It needs macOS 14+ and the Xcode Command Line Tools
+   (`swift`). If yes, tell me that `./install.sh app` builds and ad-hoc signs it, copies it to ~/Applications
+   and adds a login LaunchAgent, wait for my OK, then run it.
 
 6. Notifications (optional): tell me to install the free ntfy app, then run `./waechter.py ntfy-subscribe`
    (it copies the topic to the clipboard without printing it) and guide me through subscribing. After I

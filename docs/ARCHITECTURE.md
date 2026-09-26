@@ -1,7 +1,8 @@
 # Architecture
 
 Agent Limit Watchdog has three parts: a **tick** that runs every minute, **Claude Code hooks** that run inside
-your Claude sessions, and a small **state folder** both of them share. Everything is plain Python 3.9 standard
+your Claude sessions, and a small **state folder** both of them share. Since 1.2 an optional fourth part, a
+**menu bar app**, shows the state and controls the watchdog through the CLI. Everything is plain Python 3.9 standard
 library; the package is called `lw` (from the original German name *Limit-Wächter*).
 
 ## Components
@@ -12,7 +13,8 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 | Claude hook | `hooks/claude_hook.py` | Claude Code, on hook events | map session ↔ Orca terminal, deny new subagents, checkpoint request, record limit errors |
 | Night mode | `lw/nacht.py` | tick, hook, CLI | who is continued after the reset: `nacht_bis` per session, `state/nacht.json` for all; ends at the report time |
 | State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks, plus `nur_nacht` / `nacht_ende`), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `log/`, `berichte/` (reports), `backups/` |
-| CLI | `lw/cli.py` | you | `status`, `night`, `pause`, `report`, `simulate`, `ntfy-setup`, … |
+| CLI | `lw/cli.py` | you, the app | `status`, `night`, `pause`, `thresholds`, `report`, `simulate`, `ntfy-setup`, … |
+| Menu bar app | `app/` (SwiftUI) | own LaunchAgent, at login | shows usage, phases, sessions; pause, night mode, thresholds, report – only via `waechter.py` |
 
 ## Data sources (all read-only)
 
@@ -92,6 +94,39 @@ which could block a session at night. So Codex is handled entirely from the tick
 Codex terminals get one short message (after a screen check); limit errors are read from the rollout files;
 continuing works like for Claude. If Orca explicitly rejects a send, `codex queue --thread <id>` is the fallback.
 
+## Menu bar app (1.2)
+
+```
+LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waechter.py … ──▶ lw/cli.py ──▶ state, config.local.toml
+        ▲                                                   │
+        └──────────── JSON on stdout (status --json, app-texte, thresholds --json) ◀┘
+```
+
+- **No own logic:** the app never reads the state folder or writes config itself. Every action is a CLI call
+  (`/usr/bin/python3 waechter.py …`, argument list, no shell, in the background, 20 s timeout):
+  `status --json`, `pause 30m|2h`, `pause`, `pause aus`, `nacht an|aus [<full id>]`,
+  `schwellen setzen … --json`, `report`, `app-texte`. The German command names also work when the language is
+  English and vice versa. Status is reloaded every 30 s, when the popover opens and after every command.
+- **Contract `status --json`:** besides the older keys it has `version`, `jetzt`, `sprache`, `pause_bis`,
+  `letzter_tick`, `nur_mit_nachtmodus`, `bericht_uhrzeit`, `schwellen` {`warnung`, `stopp`, `woche_warnung`,
+  `woche_stopp`, `wochen_reserve`} and per session `projekt` (folder name of cwd/worktree) and `status_text`.
+  Example: `tests/fixtures/app/status.json`. The app decodes every field as optional and drops broken entries.
+- **Texts:** the hidden command `app-texte` returns `{"sprache", "texte"}` with all keys starting with `app_`,
+  `phase_`, `z_` from `lw/sprache.py`, placeholders unreplaced; the app fills `{name}` itself and formats
+  times by `sprache`. So all user-facing texts still live in one place.
+- **Thresholds:** `schwellen setzen` accepts integers 1..99 (reserve 0..50), checks the merged configuration
+  with `konfig.pruefen()` and writes only `config.local.toml` via `konfig.lokal_setzen()` (keeps other lines and
+  comments, atomic replace, keeps file mode, new file 0600). `--json` → `{"ok": true, "schwellen": {…}}` / exit 0 or
+  `{"ok": false, "fehler": […]}` / exit 2.
+- **Build:** `app/build.sh` runs `swift build -c release`, writes `Info.plist` (identifier `<label>.app`,
+  `LSUIElement`, minimum macOS 14.0, version = `lw.VERSION`, `LWProjekt` = project path; overridable with
+  `LIMIT_WAECHTER_PROJEKT`) and signs **ad hoc** (`codesign -s -`, verified with `--strict`) – no paid certificate.
+- **LaunchAgent** `<label>.app`: starts `~/Applications/Limit-Waechter.app/Contents/MacOS/LimitWaechter`,
+  `RunAtLoad`, `KeepAlive {SuccessfulExit: false}`, `LimitLoadToSessionType Aqua`, `ProcessType Interactive`,
+  logs to `log/app.out.log` / `app.err.log`. Installed only by `./install.sh app`, removed by `./uninstall.sh`.
+- **Self-test:** `LimitWaechter --selbsttest <status.json>` decodes a file with the app's models without GUI
+  (exit 0/1); `--version` prints the version. CI builds the app and runs the self-test.
+
 ## Design decisions
 
 - **Built-in first:** Claude Code's auto-continue is official; the watchdog fills the gaps instead of replacing it.
@@ -102,4 +137,5 @@ continuing works like for Claude. If Orca explicitly rejects a send, `codex queu
 - **Fail passive:** stale state disables the hooks; the tick catches its own errors and reports them once a day.
 - **No macOS privacy prompts at night:** the LaunchAgent does not probe folders protected by TCC
   (Documents, Desktop, iCloud, …); an Orca terminal that already has access handles those.
+- **The app is a thin client (1.2):** one source of truth (the CLI), no second implementation of rules or texts.
 - **One file per session:** hooks from many sessions write in parallel without locking each other out.

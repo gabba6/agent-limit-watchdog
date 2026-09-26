@@ -1,0 +1,36 @@
+{
+ "version": "1.2",
+ "jetzt": 1790447300.0,
+ "sprache": "de",
+ "phasen": {
+  "claude": {"anbieter": "claude", "phase": "warnung", "art": "fuenf", "pct": 84.0, "reset": 1790451000.0,
+             "fenster_id": "claude-fuenf-2984085", "pct5": 84.0, "reset5": 1790451000.0, "pctw": 65.0,
+             "resetw": 1790470800.0, "reserve_erreicht": false, "stand": 1790447271.0, "alter": 29.0,
+             "veraltet": false, "quelle": "orca", "hat_daten": true},
+  "codex": {"anbieter": "codex", "phase": "ok", "art": "fuenf", "pct": 0.0, "reset": null, "fenster_id": null,
+            "pct5": null, "reset5": null, "pctw": null, "resetw": null, "reserve_erreicht": false, "stand": null,
+            "alter": null, "veraltet": false, "quelle": null, "hat_daten": false}
+ },
+ "pausiert": false,
+ "pause_bis": null,
+ "letzter_tick": 1790447281.0,
+ "launchagent": true,
+ "ntfy_topic": true,
+ "orca_ok": true,
+ "nacht": 1790488800.0,
+ "nur_mit_nachtmodus": true,
+ "bericht_uhrzeit": "08:00",
+ "schwellen": {"warnung": 80, "stopp": 92, "woche_warnung": 80, "woche_stopp": 92, "wochen_reserve": 20},
+ "sitzungen": [
+  {"anbieter": "claude", "id": "11111111-2222-3333-4444-555555555555", "cwd": "/Users/alex/Projects/demo-app",
+   "projekt": "demo-app", "status": "aktiv", "status_text": "aktiv", "wartet": false, "zuletzt": 1790447000.0, "nacht_bis": null},
+  {"anbieter": "claude", "id": "66666666-7777-8888-9999-000000000000", "cwd": "/Users/alex/Projects/website",
+   "projekt": "website", "status": "gestoppt", "status_text": "gestoppt", "wartet": true, "zuletzt": 1790440000.0,
+   "fortsetzen_ab": 1790451120.0, "nacht_bis": 1790488800.0},
+  {"anbieter": "codex", "id": "01a0da88-ad20-7542-b024-9d2ddfe7cc90", "cwd": "/Users/alex/Projects/api",
+   "projekt": "api", "status": "wartet_auf_weiter", "status_text": "wartet auf „weiter“", "zuletzt": 1790430000.0,
+   "nacht_bis": null},
+  {"anbieter": "claude", "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "cwd": null, "status": "beendet",
+   "status_text": "beendet", "zuletzt": 1790200000.0, "nacht_bis": null}
+ ]
+}

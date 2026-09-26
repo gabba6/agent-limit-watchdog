@@ -13,7 +13,7 @@ It warns you before the limit, lets running agents **save their work and pause i
 🇩🇪 Deutsche Bedienungsanleitung: [docs/ANLEITUNG.de.md](docs/ANLEITUNG.de.md)
 
 ```
-Limit Watchdog 1.1 · 26.09. 16:22
+Limit Watchdog 1.2 · 26.09. 16:22
 Watchdog: active · last tick 14 s ago · LaunchAgent loaded
 Claude  5h 94% (resets 16:30)     week 57% (resets Sun 03:00) phase STOP     data 12 s old (orca)
 Codex   5h 44% (resets 22:51)     week 38% (resets Fri 12:04) phase OK       data 2 min old (orca)
@@ -114,12 +114,34 @@ flowchart LR
 Usage in the apps marked ❌ still counts toward the same account limits, so it shows up in the percentages and
 can trigger warnings – but only sessions in Orca terminals are stopped and continued.
 
+## Menu bar app (since 1.2)
+
+A small SwiftUI menu bar app shows the same data as `status` at a glance. It is optional; the watchdog runs
+without it. The app only calls `waechter.py` (argument list, no shell, 20 s timeout) – it never types into
+terminals and never operates limit or purchase menus.
+
+- **Requirements:** macOS 14 or newer and the Xcode Command Line Tools (`swift`, `xcrun`; `xcode-select --install`).
+- **Install:** `./install.sh app` – runs the tests, builds the app with `swift build`, signs it ad hoc (no paid
+  developer account), copies it to `~/Applications/Limit-Waechter.app` (an existing copy is moved to the backups
+  first) and loads a LaunchAgent `<label>.app` so it starts at login (restarted if it crashes).
+- **What it shows:** a ring icon in the menu bar (coloured from the warning phase on, moon in night mode, pause
+  bars when paused, dashed ring if the watchdog is not running); in the popover a card per provider with 5-hour
+  and weekly usage, phase, reset time and countdown, reserve / stale-data hints; the current sessions with their
+  state and project folder; whether the watchdog is active and when it last ran.
+- **What it can do:** pause for 30 min / 2 h / until further notice and resume; night mode on/off for all
+  sessions or per session; change the five thresholds (written to `config.local.toml`); show the report; open the log.
+- **Uninstall:** `./uninstall.sh` also unloads the app's LaunchAgent and moves the app and its plist to
+  `~/.limit-waechter/backups/` (nothing is deleted).
+- Build by hand: `app/build.sh [--ausgabe <dir>] [--projekt <path>]`; self-test without GUI:
+  `LimitWaechter --selbsttest tests/fixtures/app/status.json`. Details: [app/README.md](app/README.md).
+
 ## Requirements
 
 - macOS (uses launchd, `pmset`, `caffeinate`, the keychain) and `/usr/bin/python3` (3.9+, standard library only –
   nothing to `pip install`; comes with the Xcode Command Line Tools)
 - [Orca](https://github.com/stablyai/orca): your agents run in Orca terminals; usage data comes from Orca
 - Claude Code **2.1.234 or newer** (hooks, built-in auto-continue); Codex CLI optional
+- optional: macOS 14+ and the Xcode Command Line Tools for the menu bar app
 - optional: the free [ntfy](https://ntfy.sh) app on your phone
 
 ## Install
@@ -159,6 +181,7 @@ It is told never to spend money, not to test with model calls and not to touch o
 5. **Notifications on your phone:** install the ntfy app, run `./waechter.py ntfy-subscribe` (copies the random
    topic to the clipboard without printing it) → ntfy app → **+** → paste → subscribe → `./waechter.py test-push`.
 6. **Check:** `./waechter.py status` should show “LaunchAgent loaded” and a recent tick.
+7. **Optional: menu bar app** (macOS 14+, Xcode Command Line Tools): `./install.sh app`.
 
 ### What the installer changes
 
@@ -167,6 +190,7 @@ It is told never to spend money, not to test with model calls and not to touch o
 | `~/.claude/settings.json` | adds 9 hook entries (backup first; other tools' hooks are compared before writing) | `./uninstall.sh` removes only these |
 | `~/.codex/hooks.json` | nothing (backup only) | – |
 | `~/Library/LaunchAgents/<label>.plist` | runs `waechter.py tick` every 60 s, starts at login | `./uninstall.sh` unloads it and moves the plist to the backups |
+| `~/Applications/Limit-Waechter.app` + `~/Library/LaunchAgents/<label>.app.plist` | only with `./install.sh app`: the menu bar app and its login item | `./uninstall.sh` unloads it and moves app and plist to the backups |
 | macOS keychain | one item `limit-waechter-ntfy` with a random ntfy topic | `security delete-generic-password -s limit-waechter-ntfy` |
 | `~/.limit-waechter/` | state, logs, morning reports, backups | kept on uninstall; delete it yourself if you want |
 
@@ -180,6 +204,7 @@ is safe.
 | `./waechter.py status` | usage, phase, waiting or blocked sessions (`--all` for all sessions) |
 | `./waechter.py night on [session\|all]` / `night off` / `night` | night mode: continue these sessions automatically after the reset (until 08:00) |
 | `./waechter.py pause` / `pause 2h` / `pause off` | pause all interventions (Claude's built-in auto-continue keeps working) |
+| `./waechter.py thresholds` / `thresholds set warn=80 stop=92 …` | show or change the thresholds (`warn`, `stop`, `weekly_warn`, `weekly_stop`, `weekly_reserve`; written to `config.local.toml`; `--json`; German: `schwellen setzen warnung=…`) |
 | `./waechter.py report` | what happened in the last 24 h |
 | `./waechter.py simulate cycle` | full dry run with sample data: warning → stop → limit → continue → morning report |
 | `./waechter.py simulate stop` | what would happen *now* at 93 % (real terminals are only read) |
@@ -233,13 +258,12 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 ## Roadmap
 
 - ~~v1.1 – night mode~~ – done, see [Night mode](#night-mode-since-11) and the [changelog](CHANGELOG.md).
-- **v1.2 – menu bar app:** a small SwiftUI menu bar app with usage rings for Claude and Codex, pause switch,
-  night mode per session, thresholds and the report. Built locally, no paid signing.
+- ~~v1.2 – menu bar app~~ – done, see [Menu bar app](#menu-bar-app-since-12).
 
 ## Development
 
 ```sh
-cd tests && /usr/bin/python3 -m unittest        # 80+ tests, no network, no model calls
+cd tests && /usr/bin/python3 -m unittest        # 140+ tests, no network, no model calls
 ./waechter.py simulate cycle                     # end-to-end dry run with a fake Orca
 ```
 
@@ -257,6 +281,7 @@ lw/fortsetzen.py       continuing after the reset
 lw/nacht.py            night mode (per session / all, until the report time)
 lw/codex.py            Codex terminals: thread mapping, limit detection, orderly stop
 lw/sprache.py          all user-facing texts (en/de)
+app/                   menu bar app (SwiftUI, swift build, ad-hoc signed)
 install.sh             install / update      uninstall.sh   undo
 ```
 

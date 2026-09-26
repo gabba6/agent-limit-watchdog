@@ -32,6 +32,8 @@ Tipp: Mit `alias lw="~/pfad/zu/agent-limit-watchdog/waechter.py"` in der `~/.zsh
 | `./waechter.py pause` | **Wächter aus** bis auf Weiteres: keine Stopps, keine Fortsetzungen, keine Pushes |
 | `./waechter.py pause 2h` | Pause für 2 Stunden (auch `30m`, `1d`), danach automatisch wieder an |
 | `./waechter.py pause aus` | **Wächter wieder an** (gleich: `./waechter.py weiter`) |
+| `./waechter.py schwellen` | aktuelle Schwellen anzeigen |
+| `./waechter.py schwellen setzen stopp=90` | Schwellen ändern (siehe unten) |
 | `./waechter.py report` | Bericht der letzten 24 Stunden (`--stunden 48` für mehr) |
 | `./waechter.py simulate zyklus` | kompletter Probelauf mit Probedaten, nichts wird gesendet |
 | `./waechter.py simulate stop` | zeigt, was jetzt bei 93 % passieren würde (echte Terminals werden nur gelesen) |
@@ -39,6 +41,7 @@ Tipp: Mit `alias lw="~/pfad/zu/agent-limit-watchdog/waechter.py"` in der `~/.zsh
 | `./waechter.py ntfy-abo` | ntfy-Topic in die Zwischenablage (zum Abonnieren in der App) |
 | `./waechter.py test-push` | Test-Benachrichtigung aufs Handy |
 | `./install.sh` | installieren oder nach einem Update neu einrichten (mit Backup) |
+| `./install.sh app` | Menüleisten-App installieren (siehe unten) |
 | `./uninstall.sh` | **ganz ausschalten**: Autostart und Hooks entfernen (mit Backup, löscht nichts) |
 
 **Ein/Aus kurz:** vorübergehend `pause` / `pause aus`; dauerhaft `./uninstall.sh` / `./install.sh`.
@@ -87,8 +90,37 @@ max_pro_fenster = 2        # höchstens so viele automatische Fortsetzungen je S
 uhrzeit = "08:00"          # Morgenbericht; hier endet auch der Nachtmodus
 ```
 
+Die fünf Schwellen gehen auch per Befehl, ohne die Datei selbst zu bearbeiten:
+`./waechter.py schwellen setzen warnung=80 stopp=92 woche_warnung=80 woche_stopp=92 wochen_reserve=20`
+(einzelne Werte reichen). Erlaubt sind ganze Zahlen von 1 bis 99, die Reserve von 0 bis 50, und die Warnung muss
+unter dem Stopp liegen. Der Befehl schreibt nur die Zeilen unter `[schwellen]` in `config.local.toml`, alles andere
+samt Kommentaren bleibt stehen. Bei einem Fehler ändert er nichts.
+
 Änderungen wirken beim nächsten Durchlauf (höchstens eine Minute). Mit `./waechter.py status` siehst du die
 aktiven Schwellen. Ist die Datei fehlerhaft, nimmt der Wächter die Standardwerte und schreibt das ins Log.
+
+## Menüleisten-App (seit 1.2)
+
+Eine kleine App in der Menüleiste zeigt dasselbe wie `status` auf einen Blick. Sie ist freiwillig; der Wächter
+läuft auch ohne sie. Die App ruft nur `waechter.py` auf, sie tippt nie in Terminals und bedient nie Limit- oder
+Kaufmenüs.
+
+- **Voraussetzungen:** macOS 14 oder neuer und die Xcode Command Line Tools (`xcode-select --install`).
+- **Installieren:** `./install.sh app`. Das Skript lässt die Tests laufen, baut die App, signiert sie ad hoc (kein
+  kostenpflichtiges Entwicklerkonto nötig), kopiert sie nach `~/Applications/Limit-Waechter.app` (eine alte Version
+  wandert vorher in die Backups) und richtet einen Autostart ein. Die App startet dann bei jeder Anmeldung und nach
+  einem Absturz neu.
+- **Anzeige:** Das Ring-Symbol in der Menüleiste färbt sich ab der Warnphase, zeigt einen Mond im Nachtmodus,
+  Pausenstriche in der Pause und einen gestrichelten Ring, wenn der Wächter nicht läuft. Ein Klick öffnet je Anbieter
+  eine Karte mit 5-Stunden- und Wochenverbrauch, Phase, Reset-Zeit und Countdown, dazu die aktuellen Sitzungen mit
+  Zustand und Projektordner und den letzten Durchlauf.
+- **Bedienen:** Pause für 30 Minuten, 2 Stunden oder bis auf Weiteres und wieder aufheben; Nachtmodus für alle oder
+  per Mond-Schalter je Sitzung; die fünf Schwellen ändern und speichern (landet in `config.local.toml`); Bericht
+  ansehen; Log öffnen; Beenden.
+- **Sprache:** Die App übernimmt `sprache` aus der Konfiguration.
+- **Rückbau:** `./uninstall.sh` entlädt auch den Autostart der App und verschiebt App und Autostart-Datei nach
+  `~/.limit-waechter/backups/`. Gelöscht wird nichts.
+- Nach `git pull` einfach erneut `./install.sh app` ausführen.
 
 ## Was passiert wann?
 

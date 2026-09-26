@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 – 2026-09-26
+
+Menu bar app.
+
+- New optional **SwiftUI menu bar app** (macOS 14+): ring icon with the highest 5-hour usage (coloured from the
+  warning phase on, moon in night mode), popover with a card per provider (5 h and weekly rings, phase, reset,
+  countdown), current sessions, pause (30 min / 2 h / open / off), night mode for all or per session, thresholds,
+  report and log. It only calls `waechter.py`; it never types into terminals.
+- `./install.sh app` builds it with `swift build`, signs it ad hoc, copies it to `~/Applications` and adds a
+  login LaunchAgent `<label>.app`; `./uninstall.sh` unloads it and moves app and plist to the backups.
+- New command `thresholds` / `schwellen` (`set warn=80 stop=92 weekly_warn=… weekly_stop=… weekly_reserve=…`,
+  `--json`): validated, writes only `[schwellen]` in `config.local.toml`, keeps comments.
+- `status --json` has new keys (`version`, `jetzt`, `sprache`, `pause_bis`, `letzter_tick`, `nur_mit_nachtmodus`,
+  `bericht_uhrzeit`, `schwellen`, per session `projekt`, `status_text` and `wartet`); existing keys are unchanged.
+- `night`/`nacht` and `thresholds`/`schwellen` work in both languages. Config validation messages are translated.
+- CI also builds the app and runs its self-test.
+
 ## 1.1.0 – 2026-09-26
 
 Night mode. **Behaviour change:** automatic continuation after the reset is now opt-in per session.

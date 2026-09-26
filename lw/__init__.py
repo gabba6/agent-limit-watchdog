@@ -3,4 +3,4 @@
 Nur Python-Standardbibliothek (läuft mit /usr/bin/python3, 3.9).
 """
 
-VERSION = "1.1"
+VERSION = "1.2"

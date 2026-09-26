@@ -9,6 +9,7 @@ import copy
 import os
 import re
 import shutil
+import tempfile
 
 from . import sprache, util
 
@@ -176,12 +177,12 @@ def pruefen(k):
     fehler = []
     for name in ("warnung", "stopp", "woche_warnung", "woche_stopp", "wochen_reserve"):
         if not isinstance(s.get(name), (int, float)) or not 0 <= s[name] <= 100:
-            fehler.append(f"schwellen.{name} muss zwischen 0 und 100 liegen")
+            fehler.append(sprache.t("kf_bereich", name=f"schwellen.{name}"))
     if not fehler:
         if s["warnung"] >= s["stopp"]:
-            fehler.append("schwellen.warnung muss kleiner als schwellen.stopp sein")
+            fehler.append(sprache.t("kf_warnung_stopp"))
         if s["woche_warnung"] > s["woche_stopp"]:
-            fehler.append("schwellen.woche_warnung darf nicht größer als woche_stopp sein")
+            fehler.append(sprache.t("kf_woche"))
     if k["allgemein"]["sprache"] not in ("de", "en"):
         fehler.append('allgemein.sprache muss "de" oder "en" sein')
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", str(k["allgemein"]["launchagent_label"])):
@@ -253,3 +254,68 @@ def wert(k, pfad):
     for teil in pfad.split("."):
         k = k[teil]
     return k
+
+
+def _toml_wert(w):
+    if isinstance(w, bool):
+        return "true" if w else "false"
+    if isinstance(w, (int, float)):
+        return str(w)
+    return '"' + str(w).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def lokal_setzen(abschnitt, werte, datei=None):
+    """Schreibt Werte in [abschnitt] von config.local.toml: andere Zeilen und Kommentare bleiben erhalten,
+    vorhandene Schlüssel werden ersetzt, fehlende ergänzt. Atomar, Dateirechte bleiben (neu: 0o600)."""
+    datei = datei or lokal_pfad(konfig_pfad())
+    try:
+        with open(datei, encoding="utf-8") as f:
+            zeilen = f.read().splitlines()
+        rechte = os.stat(datei).st_mode & 0o777
+    except FileNotFoundError:
+        zeilen, rechte = [], 0o600
+    offen = dict(werte)
+    aktuell, letzter_eintrag = None, None
+    for i, zeile in enumerate(zeilen):
+        roh = _ohne_kommentar(zeile).strip()
+        m = re.fullmatch(r"\[([A-Za-z0-9_.-]+)\]", roh)
+        if m:
+            aktuell = m.group(1)
+            continue
+        if aktuell != abschnitt:
+            continue
+        if "=" in roh:
+            letzter_eintrag = i
+            schluessel = roh.split("=", 1)[0].strip().strip('"')
+            if schluessel in werte:
+                # alle Vorkommen ersetzen (parse_toml nimmt den letzten Wert)
+                kommentar = zeile[len(_ohne_kommentar(zeile)):]
+                zeilen[i] = f"{schluessel} = {_toml_wert(werte[schluessel])}" + (
+                    "  " + kommentar.strip() if kommentar.strip() else "")
+                offen.pop(schluessel, None)
+    neu = [f"{s} = {_toml_wert(w)}" for s, w in offen.items()]
+    if neu:
+        kopf = [i for i, z in enumerate(zeilen) if _ohne_kommentar(z).strip() == f"[{abschnitt}]"]
+        if kopf:
+            # hinter den letzten Schlüssel/Wert-Eintrag des Abschnitts (Kommentare vor dem nächsten Kopf bleiben dort)
+            pos = letzter_eintrag if letzter_eintrag is not None else kopf[-1]
+            zeilen[pos + 1:pos + 1] = neu
+        else:
+            if zeilen and zeilen[-1].strip():
+                zeilen.append("")
+            zeilen += [f"[{abschnitt}]"] + neu
+    ordner = os.path.dirname(os.path.abspath(datei))
+    os.makedirs(ordner, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=ordner, prefix=".tmp-", suffix=".toml")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(zeilen) + "\n")
+        os.chmod(tmp, rechte)
+        os.replace(tmp, datei)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return datei

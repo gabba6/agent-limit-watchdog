@@ -4,3 +4,5 @@ __pycache__/
 # local only, never publish
 privat/
 config.local.toml
+app/.build/
+app/build/

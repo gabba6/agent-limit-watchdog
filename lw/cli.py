@@ -44,6 +44,17 @@ def _ja(wert, gross=False):
     return t("ja") if wert else t("NEIN" if gross else "nein")
 
 
+SCHWELLEN = ("warnung", "stopp", "woche_warnung", "woche_stopp", "wochen_reserve")
+SCHWELLEN_ALIAS = {"warn": "warnung", "stop": "stopp", "weekly_warn": "woche_warnung", "weekly_stop": "woche_stopp",
+                   "weekly_reserve": "wochen_reserve"}
+APP_PRAEFIXE = ("app_", "phase_", "z_")
+
+
+def _projekt(x):
+    ordner = (x.get("cwd") or x.get("worktree") or "").rstrip("/")
+    return os.path.basename(ordner) or None
+
+
 def cmd_status(args, k):
     now = util.jetzt()
     orca = Orca(k["daten"]["orca"], dry_run=True)
@@ -57,9 +68,17 @@ def cmd_status(args, k):
     topic = melden.topic_vorhanden(k["melden"]["ntfy_dienst"])
     w = wach.zustand()
     if args.json:
-        liste = [dict(x, nacht_bis=nacht.bis(x, now)) for x in sitzungen]
-        print(json.dumps({"phasen": ph, "pausiert": pausiert, "launchagent": geladen, "ntfy_topic": topic,
-                          "orca_ok": daten["orca_ok"], "nacht": nacht.global_bis(now), "sitzungen": liste}, ensure_ascii=False, indent=1))
+        liste = [dict(x, nacht_bis=nacht.bis(x, now), projekt=_projekt(x), status_text=zustand_text(x.get("status")),
+                      wartet=x.get("status") in register.WARTET)
+                 for x in sitzungen]
+        print(json.dumps({"version": VERSION, "jetzt": now, "sprache": sprache.AKTUELL,
+                          "phasen": ph, "pausiert": pausiert, "pause_bis": pause_bis,
+                          "letzter_tick": zustand.get("letzter_tick"), "launchagent": geladen, "ntfy_topic": topic,
+                          "orca_ok": daten["orca_ok"], "nacht": nacht.global_bis(now),
+                          "nur_mit_nachtmodus": bool(k["fortsetzen"]["nur_mit_nachtmodus"]),
+                          "bericht_uhrzeit": str(k["bericht"]["uhrzeit"]),
+                          "schwellen": {n: k["schwellen"][n] for n in SCHWELLEN},
+                          "sitzungen": liste}, ensure_ascii=False, indent=1))
         return 0
     print(t("st_kopf", version=VERSION, zeit=time.strftime("%d.%m. %H:%M", time.localtime(now))))
     letzter = zustand.get("letzter_tick")
@@ -297,6 +316,67 @@ def cmd_konfig_wert(args, k):
     return 0
 
 
+def _schwellen_ausgabe(s, als_json):
+    if als_json:
+        print(json.dumps({"ok": True, "schwellen": s}, ensure_ascii=False))
+    else:
+        for n in SCHWELLEN:
+            print(t("sw_zeile", name=n, wert=s[n]))
+
+
+def cmd_schwellen(args, k):
+    aktuell = {n: k["schwellen"][n] for n in SCHWELLEN}
+    aktion = (args.aktion or "").lower()
+    if not aktion:
+        _schwellen_ausgabe(aktuell, args.json)
+        return 0
+    fehler, werte = [], {}
+    if aktion not in ("setzen", "set"):
+        fehler.append(t("sw_aktion", aktion=aktion))
+    elif not args.werte:
+        fehler.append(t("sw_leer"))
+    for teil in args.werte if not fehler else []:
+        if "=" not in teil:
+            fehler.append(t("sw_format", teil=teil))
+            continue
+        name, roh = (x.strip() for x in teil.split("=", 1))
+        name = SCHWELLEN_ALIAS.get(name.lower(), name.lower())
+        if name not in SCHWELLEN:
+            fehler.append(t("sw_schluessel", name=name))
+            continue
+        grenzen = (0, 50) if name == "wochen_reserve" else (1, 99)
+        try:
+            zahl = int(roh)
+        except ValueError:
+            zahl = None
+        if zahl is None or not grenzen[0] <= zahl <= grenzen[1]:
+            fehler.append(t("sw_zahl", name=name, min=grenzen[0], max=grenzen[1]))
+            continue
+        werte[name] = zahl
+    if not fehler:
+        probe = {a: dict(v) if isinstance(v, dict) else v for a, v in k.items()}
+        probe["schwellen"].update(werte)
+        fehler = konfig.pruefen(probe)
+    if fehler:
+        if args.json:
+            print(json.dumps({"ok": False, "fehler": fehler}, ensure_ascii=False))
+        else:
+            print(t("sw_fehler", fehler="; ".join(fehler)))
+        return 2
+    datei = konfig.lokal_setzen("schwellen", werte)
+    aktuell.update(werte)
+    if not args.json:
+        print(t("sw_gespeichert", datei=datei))
+    _schwellen_ausgabe(aktuell, args.json)
+    return 0
+
+
+def cmd_app_texte(args, k):
+    texte = {n: (e.get(sprache.AKTUELL) or e["en"]) for n, e in sprache.TEXTE.items() if n.startswith(APP_PRAEFIXE)}
+    print(json.dumps({"sprache": sprache.AKTUELL, "texte": texte}, ensure_ascii=False, indent=1, sort_keys=True))
+    return 0
+
+
 def _namen(de, en):
     """Hauptname je nach Sprache, der andere als Alias."""
     return (de, [en]) if sprache.AKTUELL == "de" else (en, [de])
@@ -306,7 +386,8 @@ def main(argv=None):
     k = konfig.laden()
     ap = argparse.ArgumentParser(prog="waechter.py", description=t("cli_beschreibung"))
     liste = ["status", "tick", "simulate", "pause", _namen("nacht", "night")[0], _namen("weiter", "resume")[0], "report",
-             _namen("ntfy-einrichten", "ntfy-setup")[0], _namen("ntfy-abo", "ntfy-subscribe")[0], "test-push"]
+             _namen("schwellen", "thresholds")[0], _namen("ntfy-einrichten", "ntfy-setup")[0],
+             _namen("ntfy-abo", "ntfy-subscribe")[0], "test-push"]
     sub = ap.add_subparsers(dest="befehl", required=True, metavar="{" + ",".join(liste) + "}")
     p = sub.add_parser("status", help=t("h_status"))
     p.add_argument("--json", action="store_true")
@@ -336,6 +417,12 @@ def main(argv=None):
     p = sub.add_parser("report", help=t("h_report"))
     p.add_argument("--stunden", "--hours", dest="stunden", type=float, default=24)
     p.set_defaults(f=cmd_report)
+    name, alias = _namen("schwellen", "thresholds")
+    p = sub.add_parser(name, aliases=alias, help=t("h_schwellen"))
+    p.add_argument("aktion", nargs="?")
+    p.add_argument("werte", nargs="*")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(f=cmd_schwellen)
     name, alias = _namen("ntfy-einrichten", "ntfy-setup")
     p = sub.add_parser(name, aliases=alias, help=t("h_ntfy_setup"))
     p.set_defaults(f=cmd_ntfy_einrichten)
@@ -347,6 +434,8 @@ def main(argv=None):
     p = sub.add_parser("config-get", aliases=["konfig-wert"])
     p.add_argument("schluessel")
     p.set_defaults(f=cmd_konfig_wert)
+    p = sub.add_parser("app-texte", aliases=["app-texts"])
+    p.set_defaults(f=cmd_app_texte)
     args = ap.parse_args(argv)
     return args.f(args, k)
 

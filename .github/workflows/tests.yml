@@ -16,3 +16,7 @@ jobs:
         run: cd tests && /usr/bin/python3 -m unittest -v
       - name: Full simulated cycle
         run: ./waechter.py simulate cycle
+      - name: Menu bar app build
+        run: |
+          app/build.sh --ausgabe "$RUNNER_TEMP/app"
+          "$RUNNER_TEMP/app/Limit-Waechter.app/Contents/MacOS/LimitWaechter" --selbsttest tests/fixtures/app/status.json
