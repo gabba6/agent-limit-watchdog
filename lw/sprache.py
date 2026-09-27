@@ -613,4 +613,19 @@ TEXTE = {
                             "en": "DRY-RUN: would send via codex queue to {id}: {text}"},
     "log_codex_queue_fehler": {"de": "codex queue an {id} fehlgeschlagen: {fehler}",
                                "en": "codex queue to {id} failed: {fehler}"},
+    # ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+
+    # ======== v1.4 A Ende ========
+
+    # ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+
+    # ======== v1.4 B Ende ========
+
+    # ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+
+    # ======== v1.4 C Ende ========
+
+    # ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
+
+    # ======== v1.4 D Ende ========
 }

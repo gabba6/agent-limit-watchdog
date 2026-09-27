@@ -19,7 +19,7 @@ def pause_info(now):
     return aktiv, p.get("bis")
 
 
-def daten_sammeln(ctx, sim=None):
+def daten_sammeln(ctx, sim=None, abrufen=True):
     k, now = ctx.k, ctx.now
     vorhanden = ctx.orca_vorhanden()
     d = {"orca_ok": vorhanden, "orca_vorhanden": vorhanden, "fehler": []}
@@ -45,6 +45,11 @@ def daten_sammeln(ctx, sim=None):
     d["codex_credits"] = (roll or {}).get("credits")
     d["codex_reset_credits"] = (lim.get("codex") or {}).get("reset_credits")
     return d
+
+
+def _nach_daten(ctx, daten, zustand, sitzungen):
+    """v1.4 A: fruehes Reset erkennen. -> True, wenn Sitzungen geaendert wurden."""
+    return False
 
 
 def limit_hinweise(sitzungen, now):
@@ -260,6 +265,30 @@ def _wird_fortgesetzt(k, s, now):
     return bool(b and b > (s.get("fortsetzen_ab") or 0))
 
 
+def _wach_halten(ctx, mac, pausiert):
+    if pausiert:
+        return
+    k, now = ctx.k, ctx.now
+    # Wachhalten und Remote-Modus nur, solange eine Fortsetzung ansteht
+    wartend = [s for s in register.alle() if s.get("status") in register.WARTET and s.get("fortsetzen_ab")
+               and _wird_fortgesetzt(k, s, now)]
+    grenze = now + k["wach"]["max_stunden_voraus"] * 3600
+    naechste = [max(s["fortsetzen_ab"], now) for s in wartend if s["fortsetzen_ab"] <= grenze]
+    if naechste:
+        if k["wach"]["caffeinate"]:
+            wach_text = wach.sicherstellen(max(naechste) + k["wach"]["nachlauf_minuten"] * 60, now, ctx.dry_run)
+            if wach_text:
+                ctx.aktion(wach_text)
+        if k["wach"]["remote_modus_pruefen"] and _nacht(now) and not ctx.melder.bereits(_nacht_schluessel(now)):
+            hinweis = _nacht_hinweis(mac)
+            if hinweis:
+                befehl = k["wach"]["remote_modus_befehl"]
+                aktion = t("nacht_aktion_befehl", befehl=befehl) if befehl else t("nacht_aktion")
+                ctx.melder.senden(t("push_remote_nacht", hinweis=hinweis, zeit=util.uhrzeit(min(naechste)),
+                                    aktion=aktion), prio=4,
+                                  tags=["electric_plug"], schluessel=_nacht_schluessel(now))
+
+
 def ausfuehren(ctx, sim=None, mac_sim=None):
     """Kern eines Ticks. sim: vorgegebene Nutzungsdaten (Simulation/Tests)."""
     k, now = ctx.k, ctx.now
@@ -272,6 +301,8 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
     if not daten["orca_ok"] and daten.get("fehler"):
         ctx.orca_fehler = "; ".join(daten["fehler"])
     sitzungen = register.alle()
+    if _nach_daten(ctx, daten, zustand, sitzungen):
+        sitzungen = register.alle()
     ph = phasen_berechnen(k, daten, sitzungen, now)
     current_schreiben(k, ph, pausiert, now)
 
@@ -318,25 +349,8 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
                         and (s.get("pruefen_ab") or now + 1) <= now:
                     fortsetzen.pruefen(ctx, s)
 
-        # Wachhalten und Remote-Modus nur, solange eine Fortsetzung ansteht
-        wartend = [s for s in register.alle() if s.get("status") in register.WARTET and s.get("fortsetzen_ab")
-                   and _wird_fortgesetzt(k, s, now)]
-        grenze = now + k["wach"]["max_stunden_voraus"] * 3600
-        naechste = [max(s["fortsetzen_ab"], now) for s in wartend if s["fortsetzen_ab"] <= grenze]
-        if naechste:
-            if k["wach"]["caffeinate"]:
-                wach_text = wach.sicherstellen(max(naechste) + k["wach"]["nachlauf_minuten"] * 60, now, ctx.dry_run)
-                if wach_text:
-                    ctx.aktion(wach_text)
-            if k["wach"]["remote_modus_pruefen"] and _nacht(now) and not ctx.melder.bereits(_nacht_schluessel(now)):
-                hinweis = _nacht_hinweis(mac)
-                if hinweis:
-                    befehl = k["wach"]["remote_modus_befehl"]
-                    aktion = t("nacht_aktion_befehl", befehl=befehl) if befehl else t("nacht_aktion")
-                    ctx.melder.senden(t("push_remote_nacht", hinweis=hinweis, zeit=util.uhrzeit(min(naechste)),
-                                        aktion=aktion), prio=4,
-                                      tags=["electric_plug"], schluessel=_nacht_schluessel(now))
         _bericht(ctx, zustand)
+    _wach_halten(ctx, mac, pausiert)
 
     zustand["letzter_tick"] = now
     if now - zustand.get("letztes_lebenszeichen", 0) > 1800:

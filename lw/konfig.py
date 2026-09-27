@@ -71,6 +71,9 @@ STANDARD = {
 }
 
 
+PRUEF_ZUSATZ = []  # f(k) -> [fehlertexte]
+
+
 class KonfigFehler(ValueError):
     pass
 
@@ -194,6 +197,8 @@ def pruefen(k):
         fehler.append('fortsetzen.claude_limit_resume muss "waechter" oder "orca" sein')
     if not re.fullmatch(r"\d{1,2}:\d{2}", str(k["bericht"]["uhrzeit"])):
         fehler.append('bericht.uhrzeit muss wie "08:00" aussehen')
+    for f in PRUEF_ZUSATZ:
+        fehler.extend(f(k))
     return fehler
 
 
@@ -322,3 +327,20 @@ def lokal_setzen(abschnitt, werte, datei=None):
             pass
         raise
     return datei
+
+
+# ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 A Ende ========
+
+# ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 B Ende ========
+
+# ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 C Ende ========
+
+# ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 D Ende ========

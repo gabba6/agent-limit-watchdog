@@ -60,3 +60,19 @@ remote_modus_befehl = ""               # optional command shown in that warning,
 
 [bericht]                              # morning report
 uhrzeit = "08:00"                      # only sent if something happened overnight; night mode ends at this time
+
+# ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 A Ende ========
+
+# ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 B Ende ========
+
+# ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 C Ende ========
+
+# ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 D Ende ========

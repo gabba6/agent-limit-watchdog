@@ -18,6 +18,11 @@ def basis():
     return os.environ.get("LIMIT_WAECHTER_HOME") or os.path.expanduser("~/.limit-waechter")
 
 
+def offline():
+    """Tests/CI: keine Netzabrufe, kein Schluesselbund, kein osascript/sysadminctl."""
+    return os.environ.get("LIMIT_WAECHTER_OFFLINE") == "1"
+
+
 def pfad(*teile):
     p = os.path.join(basis(), *teile)
     os.makedirs(os.path.dirname(p), exist_ok=True)
