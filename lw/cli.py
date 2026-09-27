@@ -126,7 +126,10 @@ def cmd_status(args, k):
         liste = []
         for x in sitzungen:
             f = orte.faehigkeiten(x, k, daten["orca_ok"])
-            eintrag = dict(x, nacht_bis=nacht.bis(x, now), projekt=_projekt(x),
+            eigen = x.get("nacht_bis") if (x.get("nacht_bis") or 0) > now else None
+            # nacht_bis = wirksam (eigen oder für alle); getrennt, damit die App den Schalter richtig zeigt
+            eintrag = dict(x, nacht_bis=nacht.bis(x, now), nacht_eigen=eigen, nacht_global=nacht.global_bis(now),
+                           projekt=_projekt(x),
                            status_text=zustand_text(x.get("status")), wartet=x.get("status") in register.WARTET,
                            automatisch=automatisch(x, k, now, daten["orca_ok"]),
                            ort=orte.ort(x), ort_text=t("ort_" + orte.ort(x)), faehigkeiten=f,
@@ -446,6 +449,8 @@ def cmd_schwellen(args, k):
 
 
 def cmd_app_texte(args, k):
+    if getattr(args, "sprache", None):          # Vorschau/Demo: Texte passend zur Sprache der Demo-Daten
+        sprache.setzen(args.sprache, sprache.NUTZER)
     texte = {n: (e.get(sprache.AKTUELL) or e["en"]) for n, e in sprache.TEXTE.items() if n.startswith(APP_PRAEFIXE)}
     print(json.dumps({"sprache": sprache.AKTUELL, "texte": texte}, ensure_ascii=False, indent=1, sort_keys=True))
     return 0
@@ -509,6 +514,7 @@ def main(argv=None):
     p.add_argument("schluessel")
     p.set_defaults(f=cmd_konfig_wert)
     p = sub.add_parser("app-texte", aliases=["app-texts"])
+    p.add_argument("--sprache", "--language", dest="sprache", choices=("de", "en"))
     p.set_defaults(f=cmd_app_texte)
     for f in PARSER_ZUSATZ:
         n = f(sub)

@@ -49,7 +49,7 @@ class SystemAttrappe:
                 if self.sperre == "off":
                     return erg(err="2026-09-27 15:26:51.278 sysadminctl[1:2] screenLock is off")
                 if self.sperre == "immediate":
-                    return erg(err="2026-09-27 15:26:51.278 sysadminctl[1:2] screenLock is immediate")
+                    return erg(err="2026-09-27 15:26:51.278 sysadminctl[1:2] screenLock delay is immediate")
                 return erg(err=f"2026-09-27 sysadminctl[1:2] screenLock delay is {self.sperre} seconds")
             if not self.sysadmin_ok:
                 return erg(1, err="Authentication failed")
@@ -136,6 +136,7 @@ class WachBasis(TempHome):
 class SperreParserTest(TempHome):
     def test_parser(self):
         self.assertEqual(wach.parse_sperre("2026 sysadminctl[1:2] screenLock delay is 300 seconds"), "300")
+        self.assertEqual(wach.parse_sperre("x screenLock delay is immediate"), "immediate")
         self.assertEqual(wach.parse_sperre("x screenLock is immediate"), "immediate")
         self.assertEqual(wach.parse_sperre("x screenLock is off"), "off")
         self.assertIsNone(wach.parse_sperre("Unsinn"))
@@ -232,6 +233,56 @@ class ManuellTest(WachBasis):
         self.sys.sperre = "off"
         wach.wach_aus(self.k, self.now)
         self.assertIn(["/usr/sbin/sysadminctl", "-screenLock", "120", "-password", PASSWORT], self.sys.aufrufe)
+
+    def test_aus_laesst_fremde_amphetamine_sitzung(self):
+        """wach aus ohne vorheriges wach an: Sperre wiederherstellen, fremde Sitzung des Nutzers nicht beenden."""
+        self.sys.sperre = "off"
+        self.sys.lage = "aktiv 0"
+        erg = wach.wach_aus(self.k, self.now)
+        self.assertTrue(erg["ok"])
+        self.assertEqual(self.sys.amph("end session"), [])
+
+    def test_aus_beendet_sitzung_des_alten_remote_skripts(self):
+        alt = os.path.join(self.home, ".vorherige-sperre")
+        with open(alt, "w") as f:
+            f.write("immediate\n")
+        self.k["wach"]["remote_alt_zustand"] = alt
+        self.sys.sperre = "off"
+        self.sys.lage = "aktiv 0"
+        wach.wach_aus(self.k, self.now)
+        self.assertIn(["/usr/sbin/sysadminctl", "-screenLock", "immediate", "-password", PASSWORT],
+                      self.sys.aufrufe)
+        self.assertEqual(len(self.sys.amph("end session")), 1)
+
+    def test_an_aus_mit_sofortiger_sperre(self):
+        self.sys.sperre = "immediate"
+        wach.wach_an(self.k, self.now)
+        self.assertEqual(util.lies_json(util.pfad(*wach.MODUS_DATEI))["sperre_vorher"], "immediate")
+        wach.wach_aus(self.k, self.now + 60)
+        self.assertIn(["/usr/sbin/sysadminctl", "-screenLock", "immediate", "-password", PASSWORT],
+                      self.sys.aufrufe)
+        self.assertEqual(self.sys.sperre, "immediate")
+
+    def test_rueckbau(self):
+        self.assertEqual(wach.rueckbau(self.now), ["–"])
+        wach.wach_an(self.k, self.now)
+        zeilen = wach.rueckbau(self.now)
+        self.assertTrue(any("wach aus" in z and "Bildschirmsperre" in z for z in zeilen), zeilen)
+        self.assertEqual(self.sys.sperre, "off")           # Rückbau ändert die Sperre nie (kein Passwort)
+
+    def test_rueckbau_beendet_eigene_automatische_sitzung(self):
+        util.schreib_json(util.pfad(*wach.DATEI), {"amph": {"eigen": True, "bis": self.now + 3600,
+                                                            "gestartet": self.now, "zugeklappt": True}})
+        self.sys.lage = "aktiv 3600"
+        wach.rueckbau(self.now)
+        self.assertEqual(len(self.sys.amph("end session")), 1)
+        self.assertFalse(util.lies_json(util.pfad(*wach.DATEI))["amph"]["eigen"])
+        # fremde (unbegrenzte) Sitzung bleibt
+        util.schreib_json(util.pfad(*wach.DATEI), {"amph": {"eigen": True, "bis": self.now + 3600}})
+        self.sys.lage = "aktiv 0"
+        self.sys.aufrufe.clear()
+        wach.rueckbau(self.now)
+        self.assertEqual(self.sys.amph("end session"), [])
 
     def test_ohne_amphetamine(self):
         self.ohne_amphetamine()
@@ -339,6 +390,27 @@ class AutomatischTest(WachBasis):
         self.halten()
         self.assertEqual(self.sys.amph("Amphetamine"), [])
 
+    def test_manueller_modus_ohne_amph_sitzung_startet_automatik(self):
+        """wach an konnte Amphetamine nicht starten: die automatische Sitzung (zugeklappt) springt ein."""
+        self.probe_ok()
+        wach.wach_an(self.k, self.now)
+        m = util.lies_json(util.pfad(*wach.MODUS_DATEI))
+        m["amph"] = False
+        util.schreib_json(util.pfad(*wach.MODUS_DATEI), m)
+        self.sys.lage = "inaktiv"
+        self.sys.aufrufe.clear()
+        nacht.alle_an(self.now, "08:00")
+        self.halten()
+        self.assertEqual(len(self.sys.amph("start new session")), 1)
+
+    def test_manueller_modus_amphetamine_beendet(self):
+        self.probe_ok()
+        wach.wach_an(self.k, self.now)
+        self.sys.amph_laeuft = False
+        self.assertFalse(wach._manuell_haelt())
+        self.sys.amph_laeuft = True
+        self.assertTrue(wach.haelt_zugeklappt(self.k, self.now))
+
     def test_probe_nur_tagsueber_und_einmal(self):
         self.halten()                              # 23 Uhr
         self.assertEqual(self.sys.mit("pgrep") + self.sys.amph("Amphetamine"), [])
@@ -405,10 +477,33 @@ class AutomatischTest(WachBasis):
 
     def test_fremder_befehl_bleibt(self):
         self.ohne_amphetamine()
-        self.k["wach"]["remote_modus_befehl"] = "~/bin/wach.sh on"
+        skript = os.path.join(self.home, "wach.sh")
+        with open(skript, "w") as f:
+            f.write("#!/bin/sh\n")
+        self.k["wach"]["remote_modus_befehl"] = skript + " on"
         self._wartende_sitzung()
         self.halten(mac={"netzteil": True, "wach_bei_deckel_zu": False})
-        self.assertTrue(any("~/bin/wach.sh on" in m["text"] for m in self.melder.protokoll))
+        self.assertTrue(any(skript + " on" in m["text"] for m in self.melder.protokoll))
+
+    def test_geloeschtes_altes_skript_zeigt_eigenen_befehl(self):
+        self.ohne_amphetamine()
+        self.k["wach"]["remote_modus_befehl"] = os.path.join(self.home, "weg", "remote.sh") + " an"
+        self._wartende_sitzung()
+        self.halten(mac={"netzteil": True, "wach_bei_deckel_zu": False})
+        texte = [m["text"] for m in self.melder.protokoll]
+        self.assertTrue(any("wach an" in x for x in texte), texte)
+        self.assertFalse(any("remote.sh" in x for x in texte))
+
+    def test_alte_zustandsdatei_neben_remote_skript(self):
+        ordner = os.path.join(self.home, "Remote-Modus")
+        os.makedirs(ordner)
+        with open(os.path.join(ordner, ".vorherige-sperre"), "w") as f:
+            f.write("600\n")
+        self.k["wach"]["remote_modus_befehl"] = os.path.join(ordner, "remote.sh") + " an"
+        self.assertEqual(wach.alt_zustand_datei(self.k), os.path.join(ordner, ".vorherige-sperre"))
+        self.sys.sperre = "off"
+        wach.wach_aus(self.k, self.now)
+        self.assertIn(["/usr/sbin/sysadminctl", "-screenLock", "600", "-password", PASSWORT], self.sys.aufrufe)
 
 
 # ---------------------------------------------------------------------------------------------- 14, 16

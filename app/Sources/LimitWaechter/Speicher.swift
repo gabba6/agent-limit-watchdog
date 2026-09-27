@@ -54,8 +54,9 @@ final class Speicher: ObservableObject {
         return text
     }
 
-    func texteLaden() async {
-        let e = await Befehle.ausfuehren(["app-texte"])
+    /// `sprache` nur für Vorschau/Demo: Texte in der Sprache der Demo-Daten statt der lokalen Konfiguration.
+    func texteLaden(_ gewuenscht: String? = nil) async {
+        let e = await Befehle.ausfuehren(["app-texte"] + (gewuenscht.map { ["--sprache", $0] } ?? []))
         if let s = e.startFehler {
             if !demo { startFehler = s }
             return
@@ -71,7 +72,10 @@ final class Speicher: ObservableObject {
     func aktualisieren() async {
         if let pfad = demoPfad {
             do {
-                status = try JSONDecoder().decode(Status.self, from: Data(contentsOf: URL(fileURLWithPath: pfad)))
+                let neu = try JSONDecoder().decode(Status.self, from: Data(contentsOf: URL(fileURLWithPath: pfad)))
+                // Texte in der Sprache der Demo-Daten, sonst mischen sich App- und Wächter-Texte
+                if let sp = neu.sprache, sp != sprache || texte.isEmpty { await texteLaden(sp) }
+                status = neu
             } catch {
                 meldung = t("app_fehler", ["fehler": error.localizedDescription])
             }

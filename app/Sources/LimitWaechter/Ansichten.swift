@@ -377,17 +377,28 @@ struct SitzungZeile: View {
             Spacer(minLength: 4)
             LageChip(text: lageText, farbe: Farben.lage(sitzung.lageFarbe))
             Button {
-                Task { await s.befehl(["nacht", sitzung.imNachtmodus ? "aus" : "an", sitzung.id]) }
+                Task { await s.befehl(["nacht", sitzung.eigenerNachtmodus ? "aus" : "an", sitzung.id]) }
             } label: {
                 Image(systemName: sitzung.imNachtmodus ? "moon.fill" : "moon")
-                    .foregroundStyle(sitzung.imNachtmodus ? Color.indigo : Color.secondary)
+                    .foregroundStyle(sitzung.eigenerNachtmodus ? Color.indigo
+                                     : sitzung.nurGeerbterNachtmodus ? Color.indigo.opacity(0.35) : Color.secondary)
             }
             .buttonStyle(.borderless)
-            .help(sitzung.nacht_bis.map { s.t("app_nacht_sitzung", ["zeit": s.uhrzeit($0)]) } ?? s.t("app_nacht"))
+            // Geerbt von „Nacht für alle“: pro Sitzung nicht abschaltbar, deshalb blass und gesperrt
+            .disabled(sitzung.nurGeerbterNachtmodus)
+            .help(mondHilfe)
         }
         .padding(.vertical, 5).padding(.horizontal, 8)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.6)))
         .help(hilfe)
+    }
+
+    private var mondHilfe: String {
+        if sitzung.nurGeerbterNachtmodus {
+            return s.t("app_nacht_geerbt", ["zeit": s.uhrzeit(sitzung.nacht_global ?? sitzung.nacht_bis ?? 0)])
+        }
+        if let b = sitzung.nacht_eigen ?? sitzung.nacht_bis { return s.t("app_nacht_sitzung", ["zeit": s.uhrzeit(b)]) }
+        return s.t("app_nacht")
     }
 
     /// Text vom Wächter (v1.4); für ältere Ausgaben aus dem Status gebildet.

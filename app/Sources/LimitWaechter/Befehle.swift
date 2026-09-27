@@ -14,6 +14,7 @@ struct Ergebnis {
 enum Befehle {
     static let python = "/usr/bin/python3"
     static let standardZeitlimit: TimeInterval = 20
+    // größer als Passwortdialog (lw/wach.py: schließt nach 110 s, Timeout 120 s) plus sysadminctl/Amphetamine
     static let wachZeitlimit: TimeInterval = 180
 
     static var projektPfad: String? {

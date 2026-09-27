@@ -56,6 +56,10 @@ class TestSkripte(unittest.TestCase):
         self.assertIn('LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer statusline-aus "$SETTINGS"', u)
         self.assertLess(u.index("claude-settings.json.$TS"), u.index("statusline-aus"), "erst Backup")
 
+    def test_uninstall_wach_modus(self):
+        u = lesen("uninstall.sh")
+        self.assertIn('LIMIT_WAECHTER_HOME="$LW" $PY -m lw.wach rueckbau', u)
+
     def test_kein_rm_auf_applications(self):
         for name in ("install.sh", "uninstall.sh"):
             for zeile in lesen(name).splitlines():

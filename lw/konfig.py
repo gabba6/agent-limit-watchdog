@@ -77,7 +77,7 @@ STANDARD = {
         "nachlauf_minuten": 15,
         "max_stunden_voraus": 12,
         "remote_modus_pruefen": True,
-        "remote_modus_befehl": "",                # nur für den Push-Text; leer = eigener Befehl "waechter.py wach an"
+        "remote_modus_befehl": "",                # nur für den Push-Text; leer/Skript fehlt = eigener "waechter.py wach an"
         "amphetamine": True,                      # v1.4 C: Amphetamine nutzen, falls installiert (sonst nur caffeinate)
         "amphetamine_zugeklappt": True,           # v1.4 C: "closed display mode" für eigene Sitzungen
         "bei_nachtmodus": True,                   # v1.4 C: während Nachtmodus automatisch wach halten
@@ -367,6 +367,12 @@ def _pruefen_daten(k):
             fehler.append(sprache.t("nz_kf_eng"))
         if d.get("offiziell_max_alter_minuten", 10) < normal:
             fehler.append(sprache.t("nz_kf_alter"))
+    from . import nutzung            # spät importiert: Laden der Konfiguration braucht nutzung sonst nicht
+    for anb in ("claude", "codex"):
+        name = f"{anb}_usage_url"
+        wert = d.get(name) or nutzung.STANDARD_URL[anb]
+        if not isinstance(wert, str) or not nutzung.url_erlaubt(anb, wert):
+            fehler.append(sprache.t("nz_kf_url", name=name, host=nutzung.HOSTS[anb]))
     abfall = d.get("frueh_reset_abfall", 20)
     if isinstance(abfall, bool) or not isinstance(abfall, (int, float)) or not 5 <= abfall <= 100:
         fehler.append(sprache.t("nz_kf_abfall"))

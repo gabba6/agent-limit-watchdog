@@ -53,9 +53,26 @@ def daten_sammeln(ctx, sim=None, abrufen=True):
                            "offiziell": (off["claude"] or {}).get("stand")}
     d["codex"] = phasen.waehle_quelle(off["codex"], lim.get("codex"), roll, now=now, max_alter_s=max_alter)
     d["offiziell"] = nutzung.info(k, now)
+    if abrufen and k["daten"].get("offiziell", True):
+        _hinweis_offiziell_fehlt(ctx, d["offiziell"])
     d["codex_credits"] = (roll or {}).get("credits")
     d["codex_reset_credits"] = (lim.get("codex") or {}).get("reset_credits")
     return d
+
+
+def _hinweis_offiziell_fehlt(ctx, info):
+    """Abgelaufene Anmeldung einmal je Ausfall melden, aber nur wenn eine Sitzung auf ein Reset wartet –
+    genau dann hängen die Orca-Werte womöglich hinterher. Das Token wird nie selbst erneuert."""
+    if not any(s.get("status") in register.WARTET for s in register.alle()):
+        return
+    cache = nutzung.cache_lesen()
+    for anb in ("claude", "codex"):
+        i = (info or {}).get(anb) or {}
+        if i.get("fehler") != "abgelaufen":
+            continue
+        seit = int((cache.get(anb) or {}).get("fehler_seit") or 0)
+        ctx.melder.senden(t("nz_push_abgelaufen", n=texte.NAME[anb]), prio=2, tags=["warning"],
+                          schluessel=f"offiziell_abgelaufen:{anb}:{seit}")
 
 
 FRUEH_VERTRAUT_S = 300          # statusline/rollout zählen fürs frühe Reset nur, wenn höchstens so alt
@@ -82,6 +99,7 @@ def _nach_daten(ctx, daten, zustand, sitzungen):
     Fensters deutlich oder rückt sein Reset nach vorn, werden wartende Sitzungen sofort fällig."""
     k, now = ctx.k, ctx.now
     abfall = k["daten"].get("frueh_reset_abfall", 20)
+    puffer_s = k["fortsetzen"]["puffer_minuten"] * 60
     alt_alle = zustand.get("nutzung") or {}
     neu_alle = {}
     geaendert = False
@@ -107,18 +125,28 @@ def _nach_daten(ctx, daten, zustand, sitzungen):
             gefallen = ap is not None and np is not None and ap - np >= abfall and np < stopp
             if not (vorgezogen or gefallen):
                 continue
+            # Nur ein gesunkener Füllstand belegt, dass das Fenster schon zurückgesetzt ist. Rückt bloß das
+            # Reset nach vorn, gilt das neue Reset samt Puffer (sonst Doppel-Fortsetzung mit Claudes eingebauter).
+            sofort = gefallen or not nr
+            ziel = now if sofort else nr + puffer_s
             for s in sitzungen:
                 if s.get("anbieter") == anb and s.get("status") in register.WARTET \
-                        and (s.get("art") or "fuenf") == art and (s.get("fortsetzen_ab") or 0) > now:
-                    def aenderung(x):
-                        x["fortsetzen_ab"] = now
-                        x["reset"] = now
-                    register.aktualisieren(anb, s["id"], aenderung, "fruehes Reset")
+                        and (s.get("art") or "fuenf") == art and (s.get("fortsetzen_ab") or 0) > ziel:
+                    def aenderung(x, sofort=sofort, ziel=ziel, art=art):
+                        x["fortsetzen_ab"] = ziel
+                        x["reset"] = now if sofort else nr
+                        if not sofort:
+                            x["fenster_id"] = phasen.fenster_id(anb, art, nr)
+                    register.aktualisieren(anb, s["id"], aenderung, "fruehes Reset" if sofort else "Reset vorgezogen")
                     geaendert = True
-            util.ereignis("fruehes_reset", anbieter=anb, art=art)
-            util.log(t("nz_log_frueh", n=texte.NAME[anb], art=t("art_" + art)))
-            ctx.melder.senden(t("nz_push_frueh", n=texte.NAME[anb], art=t("art_" + art)), prio=3,
-                              tags=["tada"], schluessel=f"frueh:{anb}:{art}:{int(ar)}")
+            util.ereignis("fruehes_reset", anbieter=anb, art=art, vorgezogen=not sofort)
+            if sofort:
+                util.log(t("nz_log_frueh", n=texte.NAME[anb], art=t("art_" + art)))
+                ctx.melder.senden(t("nz_push_frueh", n=texte.NAME[anb], art=t("art_" + art)), prio=3,
+                                  tags=["tada"], schluessel=f"frueh:{anb}:{art}:{int(ar)}")
+            else:
+                util.log(t("nz_log_vorgezogen", n=texte.NAME[anb], art=t("art_" + art),
+                           zeit=util.uhrzeit(nr, now)))
     zustand["nutzung"] = neu_alle
     return geaendert
 
@@ -367,7 +395,7 @@ def _wach_halten(ctx, mac, pausiert):
             return                   # am Netzteil und selbst zugeklappt wach gehalten: nichts zu tun
         hinweis = _nacht_hinweis(mac)
         if hinweis:
-            befehl = w["remote_modus_befehl"] or wach.eigener_befehl()
+            befehl = wach.hinweis_befehl(k)
             aktion = t("nacht_aktion_befehl", befehl=befehl)
             ctx.melder.senden(t("push_remote_nacht", hinweis=hinweis, zeit=util.uhrzeit(min(naechste)),
                                 aktion=aktion), prio=4,

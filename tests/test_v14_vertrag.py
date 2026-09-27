@@ -8,7 +8,7 @@ import unittest.mock
 
 from hilfe import TempHome, lies_fixture_json
 
-from lw import VERSION, cli, melden, register, util
+from lw import VERSION, cli, melden, nacht, register, util
 
 STUFEN = {"ok", "wartet", "warnung", "stopp", "limit", "pause", "stoerung"}
 LAGEN = {"arbeitet", "ruht", "sichert", "wartet", "pruefung", "weiter_noetig", "blockiert", "beendet"}
@@ -75,6 +75,10 @@ class VertragTest(TempHome):
             self.assertIn(s["lage_farbe"], FARBEN)
             self.assertTrue(s["lage_text"])
             self.assertEqual(set(s["aktivitaet"]), {"letzte", "quelle"})
+            # Nachtmodus getrennt: wirksam = max(eigen, für alle) (App zeigt geerbten Modus anders)
+            self.assertLessEqual({"nacht_bis", "nacht_eigen", "nacht_global"}, set(s))
+            wirksam = [w for w in (s["nacht_eigen"], s["nacht_global"]) if w]
+            self.assertEqual(s["nacht_bis"], max(wirksam) if wirksam else None)
 
     def test_status_json_de_und_en(self):
         for wert in ("de", "en"):
@@ -87,6 +91,20 @@ class VertragTest(TempHome):
                 lagen = {s["id"]: s["lage"] for s in d["sitzungen"]}
                 self.assertEqual(lagen["01a0da88-ad20"], "wartet")
                 self.assertEqual(lagen["33333333-4444"], "blockiert")
+
+    def test_nacht_eigen_und_fuer_alle_getrennt(self):
+        nacht.alle_an(self.now, "08:00")
+        nacht.sitzung_an("claude", "33333333-4444", self.now, "09:00")
+        code, out = self.cli("status", "--json")
+        self.assertEqual(code, 0)
+        d = json.loads(out)
+        self.pruefe_status(d)
+        s = {x["id"]: x for x in d["sitzungen"]}
+        geerbt, eigen = s["11111111-2222"], s["33333333-4444"]
+        self.assertIsNone(geerbt["nacht_eigen"])
+        self.assertIsNotNone(geerbt["nacht_global"])
+        self.assertEqual(geerbt["nacht_bis"], geerbt["nacht_global"])
+        self.assertIsNotNone(eigen["nacht_eigen"])
 
     def test_app_fixture_erfuellt_vertrag(self):
         d = lies_fixture_json(os.path.join("app", "status.json"))

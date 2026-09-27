@@ -56,7 +56,7 @@ caffeinate = true                      # caffeinate -i -s until reset + grace ti
 nachlauf_minuten = 15
 max_stunden_voraus = 12                # only keep awake for continuations within the next 12 hours
 remote_modus_pruefen = true            # at night, warn if the Mac would sleep with the lid closed or runs on battery
-remote_modus_befehl = ""               # command shown in that warning; empty = "waechter.py awake on"
+remote_modus_befehl = ""               # command shown in that warning; empty (or its script is gone) = "waechter.py awake on"
 
 [bericht]                              # morning report
 uhrzeit = "08:00"                      # only sent if something happened overnight; night mode ends at this time
@@ -93,7 +93,8 @@ amphetamine = true                     # use Amphetamine if installed (otherwise
 amphetamine_zugeklappt = true          # own Amphetamine sessions keep the Mac awake with the lid closed
 bei_nachtmodus = true                  # keep the Mac awake automatically while night mode is on (no password)
 sperre_standard = 300                  # screen lock delay in seconds restored by "awake off" if none was saved
-remote_alt_zustand = ""                # optional: state file of an older keep-awake script, read once (never changed)
+remote_alt_zustand = ""                # optional: state file of an older keep-awake script, read once (never changed);
+                                       # empty = ".vorherige-sperre" next to the script in remote_modus_befehl
 
 # ======== v1.4 C Ende ========
 

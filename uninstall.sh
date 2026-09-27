@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Limit Watchdog – uninstall: unload the LaunchAgent, remove only our own Claude hooks and restore the previous
 # status line (with backup),
-# unload and move the menu bar app, stop our caffeinate. Nothing is deleted: plists and app are moved to the backups, state/logs
+# unload and move the menu bar app, stop our caffeinate and our own Amphetamine session (warns if awake mode is still on). Nothing is deleted: plists and app are moved to the backups, state/logs
 # (~/.limit-waechter) and the ntfy topic in the keychain are kept.
 set -euo pipefail
 
@@ -50,7 +50,7 @@ say "4/5 Claude-Hooks austragen (nur die eigenen) und bisherige Statusline wiede
 (cd "$PROJ" && LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer statusline-aus "$SETTINGS")
 (cd "$PROJ" && LIMIT_WAECHTER_HOME="$LW" $PY -m lw.installer austragen "$SETTINGS")
 
-say "5/5 Eigenes caffeinate beenden …" "5/5 Stopping our caffeinate …"
+say "5/5 Eigenes caffeinate und eigene Amphetamine-Sitzung beenden …" "5/5 Stopping our caffeinate and our Amphetamine session …"
 $PY - "$LW/state/wach.json" <<'PYEOF'
 import json, os, signal, subprocess, sys
 try:
@@ -65,6 +65,10 @@ try:
 except (OSError, ValueError):
     print("   –")
 PYEOF
+
+say "   Wach-Modus: eigene Amphetamine-Sitzung beenden, Bildschirmsperre prüfen …" \
+    "   Awake mode: ending our own Amphetamine session, checking the screen lock …"
+(cd "$PROJ" && LIMIT_WAECHTER_HOME="$LW" $PY -m lw.wach rueckbau) || true
 
 print -- ""
 say "Zurückgebaut. Erhalten bleiben: $LW (Zustand, Logs, Berichte, Backups) und das ntfy-Topic im Schlüsselbund." \

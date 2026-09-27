@@ -98,6 +98,10 @@ struct Sitzung: Decodable, Identifiable {
     var automatisch: Bool?
     var fortsetzen_ab: Double?
     var nacht_bis: Double?
+    var nacht_eigen: Double?
+    var nacht_global: Double?
+    /// Wächter ab 1.4.0 liefert eigenen und geerbten Nachtmodus getrennt.
+    var nachtGetrennt = false
     var ort: String?
     var ort_text: String?
     var faehigkeiten_text: String?
@@ -109,7 +113,7 @@ struct Sitzung: Decodable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case anbieter, id, cwd, projekt, status, status_text, zuletzt, wartet, automatisch, fortsetzen_ab,
-             nacht_bis, ort, ort_text, faehigkeiten_text, lage, lage_text, lage_farbe, aktivitaet
+             nacht_bis, nacht_eigen, nacht_global, ort, ort_text, faehigkeiten_text, lage, lage_text, lage_farbe, aktivitaet
     }
 
     init(from decoder: Decoder) throws {
@@ -125,6 +129,9 @@ struct Sitzung: Decodable, Identifiable {
         automatisch = c.weich(.automatisch)
         fortsetzen_ab = c.weich(.fortsetzen_ab)
         nacht_bis = c.weich(.nacht_bis)
+        nacht_eigen = c.weich(.nacht_eigen)
+        nacht_global = c.weich(.nacht_global)
+        nachtGetrennt = c.contains(.nacht_eigen)
         ort = c.weich(.ort)
         ort_text = c.weich(.ort_text)
         faehigkeiten_text = c.weich(.faehigkeiten_text)
@@ -135,6 +142,10 @@ struct Sitzung: Decodable, Identifiable {
     }
 
     var imNachtmodus: Bool { nacht_bis != nil }
+    /// Eigener Nachtmodus dieser Sitzung (nur der lässt sich pro Sitzung ausschalten).
+    var eigenerNachtmodus: Bool { nachtGetrennt ? nacht_eigen != nil : nacht_bis != nil }
+    /// Nur über „Nacht für alle“ geerbt: Schalter pro Sitzung wirkt dann nicht.
+    var nurGeerbterNachtmodus: Bool { imNachtmodus && !eigenerNachtmodus }
     var anzeigeName: String {
         if let p = projekt, !p.isEmpty { return p }
         if let c = cwd, !c.isEmpty { return (c as NSString).lastPathComponent }

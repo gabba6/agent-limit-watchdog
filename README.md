@@ -281,6 +281,10 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
   [Where the watchdog can do what](#where-the-watchdog-can-do-what)).
 - Claude usage needs a running Orca app or the status line chain (Claude only runs the status line while a
   session is open; with an API key there is no usage data). Limit errors are still detected.
+- Official usage values (since 1.4) use Claude Code's short-lived sign-in token, read-only. The watchdog never
+  renews it. If no Claude Code session ran for a few hours (e.g. overnight), the token expires and usage falls
+  back to Orca / the status line, which can lag behind. `status`, the app and (if a session is waiting for a
+  reset) one push show “login expired”; opening Claude Code once fixes it.
 - Claude Desktop detection (`CLAUDE_CODE_ENTRYPOINT`) and `codex queue` outside Orca are not verified yet.
 - Screen texts of Claude Code and Codex change with updates. Unknown screens mean “send nothing and notify”,
   so an update can make the watchdog more cautious, not more dangerous – but it may need new patterns in

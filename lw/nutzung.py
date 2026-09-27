@@ -6,7 +6,7 @@ geloggt, gespeichert oder erneuert. Bei Fehlern fällt der Wächter still auf Or
 
 Zwischenspeicher state/offiziell.json (ohne Token):
   {"version": 1, "<anbieter>": {"stand": <epoch letzter Erfolg>|null, "versuch": epoch, "naechster": epoch,
-    "fehler": null|"auth"|"rate"|"netz"|"format"|"kein_token"|"abgelaufen", "fehler_seit": epoch|null,
+    "fehler": null|"auth"|"rate"|"netz"|"format"|"kein_token"|"abgelaufen"|"url", "fehler_seit": epoch|null,
     "backoff_s": int, "daten": {"fuenf", "woche", "woche_modell", ...}|null}}
 """
 
@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from . import VERSION, quellen, register, util
@@ -26,6 +27,21 @@ AUTH_PAUSE_S = 15 * 60
 RATE_START_S = 300
 RATE_MAX_S = 3600
 ENG_VORLAUF_S = 15 * 60
+# Der Token geht nur per https an genau diese Hosts (auch bei geänderter Konfiguration).
+HOSTS = {"claude": "api.anthropic.com", "codex": "chatgpt.com"}
+STANDARD_URL = {"claude": "https://api.anthropic.com/api/oauth/usage",
+                "codex": "https://chatgpt.com/backend-api/wham/usage"}
+
+
+def url_erlaubt(anbieter, url):
+    """Nur https und nur der erwartete Host (keine Zugangsdaten/Port-Tricks in der Adresse)."""
+    try:
+        teile = urllib.parse.urlsplit(url or "")
+        port = teile.port
+    except ValueError:
+        return False
+    return teile.scheme == "https" and (teile.hostname or "").lower() == HOSTS[anbieter] \
+        and port in (None, 443) and not teile.username and not teile.password
 
 
 # ---------------------------------------------------------------- Konfiguration
@@ -205,8 +221,19 @@ def eng_noetig(zustand, sitzungen, now):
 
 # ---------------------------------------------------------------- Abruf
 
+class _KeineWeiterleitung(urllib.request.HTTPRedirectHandler):
+    """Weiterleitungen nie folgen: urllib gäbe sonst den Authorization-Kopf an jedes Ziel weiter."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):   # noqa: D401
+        return None
+
+
+_OPENER = urllib.request.build_opener(_KeineWeiterleitung)
+
+
 def _http(req, timeout):
-    return urllib.request.urlopen(req, timeout=timeout)     # nosec: feste https-Adresse aus der Konfiguration
+    # 30x ergibt so einen HTTPError (-> "netz"), der Token verlässt nie den geprüften Host
+    return _OPENER.open(req, timeout=timeout)
 
 
 def _anfrage(k, anbieter, runner, now):
@@ -214,18 +241,24 @@ def _anfrage(k, anbieter, runner, now):
     d = _d(k)
     ua = f"agent-limit-watchdog/{VERSION}"
     if anbieter == "claude":
+        url = d.get("claude_usage_url") or STANDARD_URL["claude"]
+        if not url_erlaubt("claude", url):
+            return None, "url"
         token, fehler = claude_token(k, runner, now)
         if not token:
             return None, fehler
-        req = urllib.request.Request(d.get("claude_usage_url") or "https://api.anthropic.com/api/oauth/usage",
+        req = urllib.request.Request(url,
                                      headers={"Authorization": "Bearer " + token,
                                               "anthropic-beta": "oauth-2025-04-20",
                                               "Accept": "application/json", "User-Agent": ua})
     else:
+        url = d.get("codex_usage_url") or STANDARD_URL["codex"]
+        if not url_erlaubt("codex", url):
+            return None, "url"
         token, konto = codex_token(k)
         if not token:
             return None, konto
-        req = urllib.request.Request(d.get("codex_usage_url") or "https://chatgpt.com/backend-api/wham/usage",
+        req = urllib.request.Request(url,
                                      headers={"Authorization": "Bearer " + token, "ChatGPT-Account-Id": konto,
                                               "Accept": "application/json", "User-Agent": ua})
     del token

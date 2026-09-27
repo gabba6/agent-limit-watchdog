@@ -317,6 +317,14 @@ class AppTexteTest(CliBasis):
                 self.assertEqual(d["texte"]["app_reset"], sprache.TEXTE["app_reset"][wert])
                 self.assertIn("{zeit}", d["texte"]["app_reset"])
 
+    def test_sprache_fuer_demo(self):
+        self.sprache_setzen("en")
+        code, out = self.cli("app-texte", "--sprache", "de")
+        self.assertEqual(code, 0)
+        d = json.loads(out)
+        self.assertEqual(d["sprache"], "de")
+        self.assertEqual(d["texte"]["app_reset"], sprache.TEXTE["app_reset"]["de"])
+
     def test_nicht_in_hilfe(self):
         puffer = io.StringIO()
         with contextlib.redirect_stdout(puffer), self.assertRaises(SystemExit):

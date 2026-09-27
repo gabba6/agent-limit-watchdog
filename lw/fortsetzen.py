@@ -369,12 +369,22 @@ def _pruefen_belegt(ctx, s, term):
         # eingebaut_wartet, oder nach echtem Senden ohne lesbares Protokoll: wie bis 1.3 abschließen
         _setze(s, "fortgesetzt", f"Prüfung: {grund}", geprueft=True, laeuft_ungeprueft=False, terminal=handle)
         return
-    # Eingabe bereit und seit dem Reset bzw. Senden keine Aktivität: es läuft nichts
+    zugestellt = bool(beleg and beleg.get("zugestellt"))
     if nachpruefungen(s, fid) >= f.get("max_nachpruefungen", 3):
         util.log(t("fs_log_nachpruefung", s=_kurz(s), anzahl=nachpruefungen(s, fid)))
         _blockiert(ctx, s, t("fs_grund_unklar"), "unbekannt")
         return
+    if zugestellt:
+        # Prompt liegt in Claudes Warteschlange (queue-operation), aber noch keine Arbeit: nicht erneut senden,
+        # später nachsehen. Zählt als Nachprüfung, damit eine hängende Warteschlange als blockiert gemeldet wird.
+        def spaeter(d):
+            d["pruefen_ab"] = now + f["pruefen_nach_minuten"] * 60
+            d["terminal"] = handle
+            d.setdefault("nachpruefungen", {})[fid or "-"] = nachpruefungen(d, fid) + 1
+        register.aktualisieren(s["anbieter"], s["id"], spaeter, "Nachprüfung: Nachricht eingereiht")
+        return
 
+    # Eingabe bereit und seit dem Reset bzw. Senden keine Aktivität: es läuft nichts
     def zurueck(d):
         d["status"] = "gestoppt"
         d["fortsetzen_ab"] = now

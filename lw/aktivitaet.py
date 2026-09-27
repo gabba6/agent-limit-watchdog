@@ -9,7 +9,7 @@ nicht ins Urteil ein.
 import json
 import os
 
-from . import quellen
+from . import quellen, texte
 
 RELEVANT_SYSTEM = ("stop_hook_summary", "turn_duration")
 SCHWANZ_BYTES = 1_048_576
@@ -18,14 +18,15 @@ SCHWANZ_BYTES = 1_048_576
 def claude(transcript, seit, now=None):
     """-> {'neu', 'letzte', 'turn_offen', 'quelle'} aus dem Transcript oder None (Datei fehlt/unlesbar).
 
-    Aktivität: assistant-Einträge und user-Einträge ohne isMeta (auch Tool-Ergebnisse). Alles andere
-    (attachment, queue-operation, last-prompt, mode, ai-title, file-history-*, …) zählt nicht; Sidechains
+    Aktivität: assistant-Einträge und user-Einträge ohne isMeta (auch Tool-Ergebnisse). eine queue-operation
+    mit unserem Prompt nach 'seit' ergibt nur 'zugestellt' (eingereiht, nicht erneut senden). Alles andere (attachment, last-prompt, mode, ai-title, file-history-*, …) zählt nicht; Sidechains
     (Unteragenten) ebenfalls nicht. Turn-Ende: system/stop_hook_summary oder system/turn_duration."""
     if not transcript or not os.path.isfile(transcript):
         return None
     zeilen = quellen.lies_schwanz(transcript, SCHWANZ_BYTES)
     letzte = None
     letztes_relevant = None          # "aktiv" | "ende"
+    warteschlange = None             # letzte queue-operation nach 'seit': "enqueue" | "dequeue" | "remove"
     for zeile in zeilen:
         try:
             obj = json.loads(zeile)
@@ -41,9 +42,18 @@ def claude(transcript, seit, now=None):
             letztes_relevant = "aktiv"
         elif typ == "system" and obj.get("subtype") in RELEVANT_SYSTEM:
             letztes_relevant = "ende"
+        elif typ == "queue-operation":
+            # nur unser eigener Fortsetzungsprompt (Task-Benachrichtigungen u. a. werden auch eingereiht)
+            inhalt = obj.get("content")
+            ts = quellen.iso_zu_epoch(obj.get("timestamp"))
+            if ts is not None and ts > (seit or 0) and isinstance(inhalt, str) \
+                    and inhalt.lstrip().startswith(texte.PRAEFIXE):
+                warteschlange = obj.get("operation")
+    # Unser eingereihter Prompt (enqueue/dequeue, nicht per remove zurückgenommen) ist zugestellt, aber noch
+    # keine Arbeit: nicht erneut senden, später nachsehen.
     return {"neu": bool(letzte is not None and letzte > (seit or 0)), "letzte": letzte,
             "turn_offen": None if letztes_relevant is None else letztes_relevant == "aktiv",
-            "quelle": "transcript"}
+            "zugestellt": warteschlange in ("enqueue", "dequeue"), "quelle": "transcript"}
 
 
 def codex(k, sid, seit, now):
@@ -57,7 +67,7 @@ def codex(k, sid, seit, now):
     info = quellen.codex_thread(datei)
     letzte = info.get("letzte_aktivitaet")
     return {"neu": bool(letzte and letzte > (seit or 0)), "letzte": letzte, "turn_offen": bool(info.get("laeuft")),
-            "quelle": "rollout"}
+            "zugestellt": False, "quelle": "rollout"}
 
 
 def belege(ctx, s, seit):
@@ -76,6 +86,8 @@ def urteil(art, beleg, now=None, frist_s=None):
     if art == "bereit":
         if beleg and beleg.get("neu"):
             return "schon_fortgesetzt"
+        if beleg and beleg.get("zugestellt"):      # Nachricht liegt schon in Claudes Warteschlange
+            return "arbeitet"
         # Turn laut Protokoll noch offen und eben erst aktiv: lieber nachprüfen als hineintippen
         if beleg and beleg.get("turn_offen") and beleg.get("letzte") and now is not None and frist_s \
                 and now - beleg["letzte"] < frist_s:

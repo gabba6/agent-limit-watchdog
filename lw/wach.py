@@ -22,6 +22,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 import time
 
 from . import util
@@ -32,6 +33,14 @@ MODUS_DATEI = ("state", "wach-modus.json")  # manueller Wach-Modus (nie ein Pass
 AMPH_PFADE = ("/Applications/Amphetamine.app", "~/Applications/Amphetamine.app")
 RUNNER = None           # Tests: Attrappe mit der Signatur von subprocess.run
 TIMEOUT = 10
+# Passwortdialog schließt sich nach DIALOG_AUFGEBEN_S selbst; zusammen mit den übrigen Aufrufen bleibt
+# `wach an|aus` so sicher unter dem Zeitlimit der App (Befehle.wachZeitlimit = 180 s).
+DIALOG_AUFGEBEN_S = 110
+DIALOG_TIMEOUT = 120
+# Passwortdialog schließt sich nach DIALOG_AUFGEBEN_S selbst; zusammen mit den übrigen Aufrufen bleibt
+# `wach an|aus` so sicher unter dem Zeitlimit der App (Befehle.wachZeitlimit = 180 s).
+DIALOG_AUFGEBEN_S = 110
+DIALOG_TIMEOUT = 120
 PROBE_TIMEOUT = 60      # erste Automation-Anfrage: macOS fragt nach, der Nutzer braucht einen Moment
 AN = ("an", "on", "ein")
 AUS = ("aus", "off")
@@ -146,7 +155,7 @@ def parse_sperre(text):
     m = re.search(r"screenLock delay is (\d+) seconds", text)
     if m:
         return m.group(1)
-    if re.search(r"screenLock is immediate", text):
+    if re.search(r"screenLock (?:delay )?is immediate", text):     # echt: "screenLock delay is immediate"
         return "immediate"
     if re.search(r"screenLock is off", text):
         return "off"
@@ -163,9 +172,11 @@ def sperre_status(runner=None):
 def passwort_dialog(runner=None):
     """Passwort per macOS-Dialog. -> str oder None (Abbruch). Texte als argv, nie in das Skript eingesetzt."""
     skript = ('text returned of (display dialog (item 1 of argv) default answer "" with hidden answer '
-              'buttons {item 2 of argv, item 3 of argv} default button item 3 of argv with title (item 4 of argv))')
+              'buttons {item 2 of argv, item 3 of argv} default button item 3 of argv with title (item 4 of argv) '
+              f'giving up after {DIALOG_AUFGEBEN_S})')
     r = _ergebnis(_ausfuehren(["/usr/bin/osascript", "-e", "on run argv", "-e", skript, "-e", "end run",
-                               t("wm_dialog_text"), t("wm_abbrechen"), t("wm_ok"), t("app")], runner, timeout=300))
+                               t("wm_dialog_text"), t("wm_abbrechen"), t("wm_ok"), t("app")], runner,
+                              timeout=DIALOG_TIMEOUT))
     if r is None or r.returncode != 0:
         return None
     wert = (r.stdout or "").rstrip("\n")
@@ -270,9 +281,39 @@ def _banner(k, text, runner=None):
                  text, t("app")], runner)
 
 
+ALT_ZUSTAND_NAME = ".vorherige-sperre"      # Zustandsdatei des früheren Skripts remote.sh (neben dem Skript)
+
+
+def _skript_pfad(befehl):
+    """Erstes Wort eines Befehls als Pfad (~ aufgelöst) oder None."""
+    teile = str(befehl or "").split()
+    return os.path.expanduser(teile[0]) if teile else None
+
+
+def alt_zustand_datei(k):
+    """Alte Zustandsdatei: ausdrücklich konfiguriert, sonst neben dem Skript aus remote_modus_befehl
+    (so klappt der Umstieg von remote.sh ohne weitere Einstellung)."""
+    w = k["wach"]
+    datei = str(w.get("remote_alt_zustand") or "").strip()
+    if datei:
+        return datei
+    skript = _skript_pfad(w.get("remote_modus_befehl"))
+    return os.path.join(os.path.dirname(skript), ALT_ZUSTAND_NAME) if skript else ""
+
+
+def hinweis_befehl(k):
+    """Befehl für den Nacht-Hinweis: ein eingestellter fremder Befehl nur, solange sein Skript noch existiert
+    (alte Skripte dürfen nach dem Umstieg gelöscht werden), sonst der eigene `wach an`."""
+    befehl = str(k["wach"].get("remote_modus_befehl") or "").strip()
+    skript = _skript_pfad(befehl)
+    if befehl and skript and (os.path.exists(skript) or not os.path.isabs(skript)):
+        return befehl
+    return eigener_befehl()
+
+
 def _alt_uebernehmen(k, m):
     """Einmalig die Sperrzeit aus einer alten Zustandsdatei (remote.sh) übernehmen; die Datei bleibt, wie sie ist."""
-    datei = str(k["wach"].get("remote_alt_zustand") or "").strip()
+    datei = alt_zustand_datei(k)
     if not datei or m.get("uebernommen") or m.get("sperre_vorher"):
         return None
     try:
@@ -332,7 +373,10 @@ def wach_aus(k, now, runner=None):
     if passwort is None:
         return {"ok": False, "fehler": "abgebrochen", "text": t("wm_abgebrochen")}
     m = modus_lesen()
-    _alt_uebernehmen(k, m)
+    # Eigene Amphetamine-Sitzung: vom manuellen Modus gestartet, oder beim Umstieg die des alten remote.sh
+    eigene_sitzung = bool(m.get("an") and m.get("amph"))
+    if _alt_uebernehmen(k, m):
+        eigene_sitzung = True
     vorher = m.get("sperre_vorher") or str(k["wach"]["sperre_standard"])
     ok = sperre_setzen(vorher, passwort, runner)
     del passwort
@@ -340,7 +384,8 @@ def wach_aus(k, now, runner=None):
         text = t("wm_passwort")
         _banner(k, text, runner)
         return {"ok": False, "fehler": "passwort", "text": text}
-    if amphetamine_installiert() and amphetamine_laeuft(runner):
+    # Nur die eigene Sitzung beenden; eine selbst gestartete Amphetamine-Sitzung des Nutzers bleibt.
+    if eigene_sitzung and amphetamine_installiert() and amphetamine_laeuft(runner):
         amphetamine("beenden_manuell", runner=runner)
         d = _lies()
         if (d.get("amph") or {}).get("eigen"):
@@ -401,7 +446,7 @@ def automatisch(ctx, bedarf_bis, now):
             texte.append(x)
         d = _lies()
         amph = d.get("amph") or {}
-    if not k.get("amphetamine", True) or modus_lesen().get("an") or not amphetamine_installiert():
+    if not k.get("amphetamine", True) or not amphetamine_installiert() or _manuell_haelt():
         return texte
     if (d.get("probe") or {}).get("ergebnis") != "ok":
         return texte                          # Automation nicht (nachweislich) erlaubt: keine Rückfrage nachts
@@ -465,21 +510,26 @@ def probe(ctx, now):
     return None
 
 
+def _manuell_haelt():
+    """Manueller Wach-Modus an, seine Amphetamine-Sitzung gestartet und Amphetamine läuft noch?"""
+    m = modus_lesen()
+    return bool(m.get("an") and m.get("amph")) and amphetamine_laeuft()
+
+
 def haelt_zugeklappt(k, now):
     """Hält der Wächter den Mac gerade selbst auch zugeklappt wach (manueller Modus oder eigene Sitzung)?"""
-    m = modus_lesen()
-    if m.get("an") and m.get("amph"):
+    if _manuell_haelt():
         return True
     amph = _lies().get("amph") or {}
     return bool(amph.get("eigen") and amph.get("zugeklappt") and (amph.get("bis") or 0) > now)
 
 
-def eigener_befehl():
+def eigener_befehl(aus=False):
     pfad = os.path.join(util.PROJEKT, "waechter.py")
     heim = os.path.expanduser("~")
     if pfad.startswith(heim + os.sep):
         pfad = "~" + pfad[len(heim):]
-    return t("wm_befehl", pfad=pfad)
+    return t("wm_befehl_aus" if aus else "wm_befehl", pfad=pfad)
 
 
 # ------------------------------------------------------------------ Anzeige
@@ -543,3 +593,37 @@ def status_block(k, now, mac=None):
         text = t("wm_text_aus")
     return {"an": art != "aus", "art": art, "modus": modus, "bis": bis, "sperre": sperre,
             "zugeklappt_ok": zugeklappt_ok, "netzteil": netzteil, "amphetamine": amph_z, "text": text}
+
+
+# ------------------------------------------------------------------ Rückbau (uninstall.sh)
+
+class _RueckbauKontext:
+    dry_run = False
+
+
+def rueckbau(now=None):
+    """Für uninstall.sh: eigene automatische Amphetamine-Sitzung beenden (nur wenn plausibel unsere) und
+    warnen, falls der manuelle Wach-Modus noch an ist (dann bliebe die Bildschirmsperre dauerhaft aus).
+    Ohne Passwort; die Sperre selbst wird hier nie geändert. -> Ausgabezeilen."""
+    now = util.jetzt() if now is None else now
+    zeilen = []
+    if amphetamine_installiert() and (_lies().get("amph") or {}).get("eigen"):
+        zeilen += _eigene_beenden(_RueckbauKontext(), _lies(), now)
+    if modus_lesen().get("an"):
+        zeilen.append(t("wm_rueckbau_modus_an", befehl=eigener_befehl(aus=True)))
+    return zeilen or ["–"]
+
+
+def main(argv):
+    from . import konfig
+    konfig.laden()                    # setzt die Sprache der Ausgaben
+    if argv[:1] != ["rueckbau"]:
+        print("usage: python3 -m lw.wach rueckbau", file=sys.stderr)
+        return 2
+    for zeile in rueckbau():
+        print("   " + zeile)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

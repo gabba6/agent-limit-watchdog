@@ -142,6 +142,22 @@ class ParserTest(Basis):
         self.assertEqual(fehler, "abgelaufen")
         self.assertEqual(opener.anfragen, [])
 
+    def test_abgelaufen_nachts_push_nur_bei_wartender_sitzung(self):
+        abgelaufen = json.dumps({"claudeAiOauth": {"accessToken": TOKEN, "expiresAt": (self.now - 60) * 1000}})
+        nutzung.abrufen(self.k, "claude", self.now, opener=_Opener({}), runner=_Runner(abgelaufen))
+        info = nutzung.info(self.k, self.now)
+        ctx = self.ctx()
+        tick._hinweis_offiziell_fehlt(ctx, info)
+        self.assertEqual(ctx.melder.protokoll, [])          # niemand wartet: kein Push
+        register.aktualisieren("claude", "0b1c2d3e-0000-4000-8000-00000000f0aa", lambda d: d.update(
+            status="gestoppt", art="fuenf", reset=self.now + 3600, fortsetzen_ab=self.now + 3720,
+            zuletzt=self.now))
+        tick._hinweis_offiziell_fehlt(ctx, info)
+        tick._hinweis_offiziell_fehlt(ctx, info)
+        self.assertEqual(len(ctx.melder.protokoll), 1)      # einmal je Ausfall
+        self.assertIn("hinterher", ctx.melder.protokoll[0]["text"])
+        self.assertNotIn(TOKEN, ctx.melder.protokoll[0]["text"])
+
     def test_codex_token(self):
         self.assertEqual(nutzung.codex_token(self.k), (CODEX_TOKEN, "00000000-0000-4000-8000-000000000000"))
         datei = os.path.join(self.home, "auth.json")
@@ -351,7 +367,17 @@ class FruehesResetTest(Basis):
 
     def test_reset_nach_vorn(self):
         ctx = self.ctx()
-        self.assertTrue(tick._nach_daten(ctx, self._daten(98.0, self.reset_alt - 2 * 3600), self.zustand,
+        nr = self.reset_alt - 2 * 3600
+        self.assertTrue(tick._nach_daten(ctx, self._daten(98.0, nr), self.zustand, register.alle()))
+        s = register.lesen("claude", self.sid)
+        # Fenster noch nicht zurückgesetzt: neues Reset + Puffer, nicht sofort (keine Doppel-Fortsetzung)
+        self.assertEqual((s["fortsetzen_ab"], s["reset"]), (nr + 120, nr))
+        self.assertEqual(s["fenster_id"], phasen.fenster_id("claude", "fuenf", nr))
+        self.assertEqual(ctx.melder.protokoll, [])
+
+    def test_reset_nach_vorn_und_gefallen_sofort(self):
+        ctx = self.ctx()
+        self.assertTrue(tick._nach_daten(ctx, self._daten(3.0, self.reset_alt - 2 * 3600), self.zustand,
                                          register.alle()))
         self.assertEqual(register.lesen("claude", self.sid)["fortsetzen_ab"], self.now)
 
@@ -485,7 +511,10 @@ class KonfigTest(Basis):
         self.assertEqual(konfig.pruefen(self.k), [])
         for name, wert in (("offiziell_intervall_minuten", 0), ("offiziell_intervall_eng_minuten", 5),
                            ("offiziell_max_alter_minuten", 1), ("frueh_reset_abfall", 2),
-                           ("offiziell_timeout_sekunden", 1.5)):
+                           ("offiziell_timeout_sekunden", 1.5),
+                           ("claude_usage_url", "http://api.anthropic.com/api/oauth/usage"),
+                           ("claude_usage_url", "https://api.anthropic.com.evil.example/x"),
+                           ("codex_usage_url", "https://example.com/backend-api/wham/usage")):
             with self.subTest(name=name):
                 k = dict(self.k, daten=dict(self.k["daten"], **{name: wert}))
                 self.assertTrue(konfig.pruefen(k))
@@ -496,3 +525,28 @@ class KonfigTest(Basis):
         self.assertEqual(standard["daten"]["offiziell_intervall_minuten"], 3)
         self.assertEqual(standard["daten"]["orca"], "/Applications/Orca.app/Contents/Resources/bin/orca")
         sprache.setzen("de")
+
+
+class TokenSchutzTest(Basis):
+    def test_url_erlaubt(self):
+        self.assertTrue(nutzung.url_erlaubt("claude", "https://api.anthropic.com/api/oauth/usage"))
+        self.assertTrue(nutzung.url_erlaubt("codex", "https://chatgpt.com/backend-api/wham/usage"))
+        for url in ("http://api.anthropic.com/api/oauth/usage", "https://api.anthropic.com:8443/x",
+                    "https://user:pw@api.anthropic.com/x", "https://chatgpt.com/x", "", "kaputt://"):
+            with self.subTest(url=url):
+                self.assertFalse(nutzung.url_erlaubt("claude", url))
+
+    def test_falsche_url_ohne_token_und_netz(self):
+        self.k["daten"]["claude_usage_url"] = "http://example.com/usage"
+        runner = self.runner()
+        opener = _Opener({})
+        self.assertEqual(nutzung.abrufen(self.k, "claude", self.now, opener=opener, runner=runner), "url")
+        self.assertEqual((runner.aufrufe, opener.anfragen), ([], []))
+
+    def test_weiterleitung_wird_nicht_verfolgt(self):
+        handler = nutzung._KeineWeiterleitung()
+        req = urllib.request.Request("https://api.anthropic.com/api/oauth/usage",
+                                     headers={"Authorization": "Bearer " + TOKEN})
+        self.assertIsNone(handler.redirect_request(req, None, 302, "Found", {}, "http://evil.example/"))
+        self.assertTrue(any(isinstance(h, nutzung._KeineWeiterleitung) for h in nutzung._OPENER.handlers))
+        self.assertFalse(any(type(h) is urllib.request.HTTPRedirectHandler for h in nutzung._OPENER.handlers))

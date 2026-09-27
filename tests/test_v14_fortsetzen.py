@@ -208,6 +208,41 @@ class FortsetzenV14Test(FortsetzenBasis):
         self.assertEqual(len(self.prompts()), 2)
         self.assertTrue(any("aufgegeben" in m["text"].lower() or "2" in m["text"] for m in erg["meldungen"]))
 
+    def _einreihen(self, ts, text, operation="enqueue"):
+        with open(self.transcript, "a") as f:
+            f.write(json.dumps({"type": "queue-operation", "operation": operation, "timestamp": iso(ts),
+                                "sessionId": "sess-demo", "content": text}) + "\n")
+
+    def test_eingereihter_prompt_wird_nicht_doppelt_gesendet(self):
+        """Prompt landete nur in Claudes Warteschlange (queue-operation), kein user-Eintrag: nicht erneut senden."""
+        self.orca._agenten["tA:lA"] = {"state": "done"}
+        self.sitzung_anlegen()
+        self.lauf()
+        self.assertEqual(len(self.prompts()), 1)
+        self._einreihen(self.now + 2, self.prompts()[0]["text"])
+        self.weiter(180)
+        s = self.s()
+        self.assertEqual(s["status"], "fortgesetzt")
+        self.assertEqual(fortsetzen.nachpruefungen(s, s["fenster_id"]), 1)
+        self.weiter(60)
+        self.assertEqual(len(self.prompts()), 1)
+        # hängt die Warteschlange dauerhaft, wird die Sitzung gemeldet statt erneut beschickt
+        for _ in range(4):
+            self.weiter(180)
+        self.assertEqual(self.s()["status"], "blockiert")
+        self.assertEqual(len(self.prompts()), 1)
+
+    def test_fremde_warteschlange_zaehlt_nicht(self):
+        seit = RESET
+        self._einreihen(RESET + 60, "<task-notification> ...")
+        b = aktivitaet.claude(self.transcript, seit, RESET + 120)
+        self.assertFalse(b["zugestellt"])
+        self._einreihen(RESET + 70, "Limit-Wächter: weiter")
+        self.assertTrue(aktivitaet.claude(self.transcript, seit, RESET + 120)["zugestellt"])
+        self._einreihen(RESET + 80, "Limit-Wächter: weiter", "remove")
+        self.assertFalse(aktivitaet.claude(self.transcript, seit, RESET + 120)["zugestellt"])
+        self.assertEqual(aktivitaet.urteil("bereit", {"neu": False, "zugestellt": True}), "arbeitet")
+
     def test_nach_echtem_senden_mit_aktivitaet_geprueft(self):
         self.orca._agenten["tA:lA"] = {"state": "done"}
         self.sitzung_anlegen()
