@@ -309,6 +309,7 @@ class TickNachtTest(TempHome):
         frueh = zeit(27, 7)
         self.setze_zeit(frueh)
         self.anlegen("sess-A", frueh + 2 * 3600)      # Reset 09:00, Nachtmodus endet 08:00
+        self.k["wach"]["bei_nachtmodus"] = False       # v1.4: sonst hält schon der Nachtmodus wach (test_v14_wach)
         nacht.sitzung_an("claude", "sess-A", frueh)
         erg = self.lauf(nutzung(50, frueh + 2 * 3600, stand=frueh))
         self.assertFalse(any("caffeinate" in a for a in erg["aktionen"]))

@@ -63,7 +63,12 @@ STANDARD = {
         "nachlauf_minuten": 15,
         "max_stunden_voraus": 12,
         "remote_modus_pruefen": True,
-        "remote_modus_befehl": "",                # z. B. "~/bin/stay-awake.sh on" (nur für den Push-Text)
+        "remote_modus_befehl": "",                # nur für den Push-Text; leer = eigener Befehl "waechter.py wach an"
+        "amphetamine": True,                      # v1.4 C: Amphetamine nutzen, falls installiert (sonst nur caffeinate)
+        "amphetamine_zugeklappt": True,           # v1.4 C: "closed display mode" für eigene Sitzungen
+        "bei_nachtmodus": True,                   # v1.4 C: während Nachtmodus automatisch wach halten
+        "sperre_standard": 300,                   # v1.4 C: Sperrzeit für "wach aus" ohne gesicherten Wert
+        "remote_alt_zustand": "",                 # v1.4 C: alte Zustandsdatei von remote.sh (einmal lesen)
     },
     "bericht": {
         "uhrzeit": "08:00",
@@ -338,6 +343,15 @@ def lokal_setzen(abschnitt, werte, datei=None):
 # ======== v1.4 B Ende ========
 
 # ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+def _pruefen_wach(k):
+    w = k.get("wach", {})
+    wert = w.get("sperre_standard")
+    if isinstance(wert, bool) or not isinstance(wert, int) or not 0 <= wert <= 86400:
+        return [sprache.t("wm_kf_sperre")]
+    return []
+
+
+PRUEF_ZUSATZ.append(_pruefen_wach)
 
 # ======== v1.4 C Ende ========
 
