@@ -40,6 +40,13 @@ if let i = argumente.firstIndex(of: "--selbsttest") {
         print("quelle claude=\(st.phase("claude")?.quelle ?? "-") codex=\(st.phase("codex")?.quelle ?? "-")")
         print("wach=\(st.wach?.art ?? "-")/\(st.wach?.modus ?? "-")")
         print("lagen=\(st.aktuelleSitzungen.map { $0.lageName }.joined(separator: ","))")
+        // v1.4: Kontext je Sitzung (Prozent/Stufe oder "-")
+        let ks = st.kontext_schwellen ?? KontextSchwellen()
+        let kontexte = st.aktuelleSitzungen.map { z -> String in
+            guard let k = z.kontext, let w = k.wert else { return "-" }
+            return "\(Int(w.rounded()))/\(k.stufeName(ks))"
+        }
+        print("kontext=\(kontexte.joined(separator: ",")) schwellen \(ks.warnung)/\(ks.kritisch)")
         if let sw = st.schwellen {
             print("schwellen: \(sw.warnung)/\(sw.stopp) woche \(sw.woche_warnung)/\(sw.woche_stopp) reserve \(sw.wochen_reserve)")
         }
@@ -61,6 +68,7 @@ if argumente.contains("--vorschau") {
     let bild = wertNach("--bild").map { URL(fileURLWithPath: $0).standardizedFileURL.path }
     MainActor.assumeIsolated {
         Vorschau.einstellungenOffen = argumente.contains("--einstellungen")
+        Vorschau.detailOffen = argumente.contains("--detail")
         Vorschau.starten(demo: demo, bild: bild, erscheinung: erscheinung)
     }
 }

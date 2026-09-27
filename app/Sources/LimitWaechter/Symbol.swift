@@ -30,6 +30,15 @@ enum Farben {
         return .green
     }
 
+    /// Kontextstufe: ok = grün, warnung = orange, kritisch = rot.
+    static func kontext(_ stufe: String) -> Color {
+        switch stufe {
+        case "kritisch": return .red
+        case "warnung": return .orange
+        default: return .green
+        }
+    }
+
     /// Gesamtstufe → Farbe und SF Symbol für das Statusbanner.
     static func stufe(_ s: String) -> (farbe: Color, symbol: String) {
         switch s {

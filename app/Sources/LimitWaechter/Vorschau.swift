@@ -5,6 +5,7 @@ import SwiftUI
 // Aufruf: LimitWaechter --vorschau [--demo <status.json>] [--hell|--dunkel] [--bild <datei.png>]
 //   --demo   Status aus der Datei statt aus waechter.py; alle Befehle sind wirkungslos.
 //   --einstellungen  Einstellungen aufgeklappt.
+//   --detail  Detailansicht der ersten Sitzung (mit Kontextwert) aufgeklappt.
 //   --bild   rendert das Fenster nach dem Laden als PNG (ohne Bildschirmaufnahme-Recht) und beendet sich.
 // Ohne --bild wird die Fensternummer ausgegeben (für screencapture -o -l <nummer>).
 
@@ -13,6 +14,8 @@ enum Vorschau {
     static var fenster: NSWindow?
     /// --einstellungen: Einstellungen aufgeklappt zeigen (Screenshot der Hinweise).
     static var einstellungenOffen = false
+    /// --detail: Detailansicht der ersten Sitzung mit Kontextwert aufgeklappt zeigen.
+    static var detailOffen = false
 
     static func starten(demo: String?, bild: String?, erscheinung: String?) -> Never {
         let app = NSApplication.shared

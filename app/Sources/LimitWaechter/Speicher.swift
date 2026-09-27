@@ -17,6 +17,10 @@ final class Speicher: ObservableObject {
     @Published var schwellenFehler: Bool = false
     /// Läuft gerade "wach an/aus" (Passwortdialog offen)?
     @Published var wachLaeuft = false
+    /// Sitzung, deren Detailansicht aufgeklappt ist (Anbieter + ID).
+    @Published var offeneSitzung: String?
+    @Published var kontextMeldung: String?
+    @Published var kontextFehler: Bool = false
     /// Popover sichtbar? Dann wird bei Stopp/Limit/Warten öfter aktualisiert.
     var offen = false
 
@@ -76,6 +80,11 @@ final class Speicher: ObservableObject {
                 // Texte in der Sprache der Demo-Daten, sonst mischen sich App- und Wächter-Texte
                 if let sp = neu.sprache, sp != sprache || texte.isEmpty { await texteLaden(sp) }
                 status = neu
+                // Vorschau --detail: erste Sitzung mit Kontextwert aufgeklappt zeigen.
+                if Vorschau.detailOffen && offeneSitzung == nil {
+                    let liste = neu.aktuelleSitzungen
+                    offeneSitzung = (liste.first { $0.kontext?.wert != nil } ?? liste.first)?.schluessel
+                }
             } catch {
                 meldung = t("app_fehler", ["fehler": error.localizedDescription])
             }
@@ -154,6 +163,23 @@ final class Speicher: ObservableObject {
         await aktualisieren()
     }
 
+    /// Kontext-Schwellen (Prozent) über "schwellen setzen kontext_warnung=.. kontext_kritisch=..".
+    func kontextSchwellenSpeichern(_ k: KontextSchwellen) async {
+        if demo { return }
+        let e = await Befehle.ausfuehren([
+            "schwellen", "setzen", "kontext_warnung=\(k.warnung)", "kontext_kritisch=\(k.kritisch)", "--json"])
+        if let fs = e.startFehler { startFehler = fs; return }
+        if let d = e.ausgabe.data(using: .utf8), let a = try? JSONDecoder().decode(SchwellenAntwort.self, from: d) {
+            kontextFehler = !a.ok
+            kontextMeldung = a.ok ? t("app_gespeichert")
+                                  : t("app_fehler", ["fehler": (a.fehler ?? []).joined(separator: "; ")])
+        } else {
+            kontextFehler = true
+            kontextMeldung = t("app_fehler", ["fehler": kurz(e)])
+        }
+        await aktualisieren()
+    }
+
     func berichtLaden() async {
         bericht = ""
         if demo { bericht = t("app_bericht_leer"); return }
@@ -211,6 +237,17 @@ final class Speicher: ObservableObject {
         let min = max(0, Int(sekunden / 60))
         if min < 60 { return t("app_min", ["n": "\(min)"]) }
         return t("app_std", ["h": "\(min / 60)", "m": "\(min % 60)"])
+    }
+
+    /// Tokenzahl kurz: 950, 412k, 1M, 1.2M (de: 1,2M).
+    func tokens(_ wert: Double?) -> String {
+        guard let w = wert, w >= 0 else { return "–" }
+        if w < 1000 { return "\(Int(w.rounded()))" }
+        if w < 999_500 { return "\(Int((w / 1000).rounded()))k" }
+        let m = (w / 100_000).rounded() / 10
+        var text = m == m.rounded() ? "\(Int(m))" : String(format: "%.1f", m)
+        if sprache != "en" { text = text.replacingOccurrences(of: ".", with: ",") }
+        return text + "M"
     }
 
     /// "84 %" (de) bzw. "84%" (en).

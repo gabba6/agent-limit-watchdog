@@ -334,7 +334,7 @@ struct SitzungenBereich: View {
             } else {
                 let sichtbar = alle ? liste : Array(liste.prefix(maxZeilen))
                 VStack(spacing: 4) {
-                    ForEach(sichtbar) { SitzungZeile(sitzung: $0) }
+                    ForEach(sichtbar, id: \.schluessel) { SitzungZeile(sitzung: $0, status: status) }
                 }
                 if liste.count > maxZeilen {
                     Button(alle ? s.t("app_weniger") : s.t("app_weitere", ["n": "\(liste.count - maxZeilen)"])) {
@@ -362,15 +362,40 @@ struct LageChip: View {
 struct SitzungZeile: View {
     @EnvironmentObject var s: Speicher
     let sitzung: Sitzung
+    let status: Status
+
+    private var offen: Bool { s.offeneSitzung == sitzung.schluessel }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            kopf
+            if offen {
+                Divider().padding(.top, 5)
+                SitzungDetail(sitzung: sitzung, status: status)
+            }
+        }
+        .padding(.vertical, 5).padding(.horizontal, 8)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(.quaternary.opacity(offen ? 0.9 : 0.6)))
+    }
+
+    /// Kopfzeile: ein Klick klappt die Detailansicht auf bzw. zu (der Mond bleibt ein eigener Knopf).
+    private var kopf: some View {
         HStack(spacing: Mass.eng) {
+            Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(offen ? 90 : 0))
+                .frame(width: 8)
             Circle().fill(Farben.anbieter(sitzung.anbieter)).frame(width: 8, height: 8)
                 .help(sitzung.anbieter == "codex" ? "Codex" : "Claude")
             VStack(alignment: .leading, spacing: 1) {
                 Text(sitzung.anzeigeName).font(.callout).lineLimit(1).truncationMode(.middle)
-                if let o = sitzung.ort_text, !o.isEmpty {
-                    Text(o).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                HStack(spacing: 6) {
+                    if let o = sitzung.ort_text, !o.isEmpty {
+                        Text(o).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    if let k = sitzung.kontext {
+                        KontextMini(kontext: k, schwellen: status.kontext_schwellen ?? KontextSchwellen())
+                    }
                 }
             }
             .layoutPriority(1)
@@ -388,8 +413,10 @@ struct SitzungZeile: View {
             .disabled(sitzung.nurGeerbterNachtmodus)
             .help(mondHilfe)
         }
-        .padding(.vertical, 5).padding(.horizontal, 8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.6)))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.15)) { s.offeneSitzung = offen ? nil : sitzung.schluessel }
+        }
         .help(hilfe)
     }
 
@@ -416,7 +443,8 @@ struct SitzungZeile: View {
     }
 
     private var hilfe: String {
-        [sitzung.faehigkeiten_text, sitzung.status_text].compactMap { $0 }.filter { !$0.isEmpty }
+        ([sitzung.faehigkeiten_text, sitzung.status_text].compactMap { $0 }.filter { !$0.isEmpty }
+            + [s.t(offen ? "app_kontext_zuklappen" : "app_kontext_details")])
             .joined(separator: " · ")
     }
 }
@@ -556,6 +584,13 @@ struct EinstellungenBereich: View {
                     // Neu erzeugen, wenn sich die Schwellen von außen ändern (CLI, korrigierte Konfiguration).
                     SchwellenBereich(start: status.schwellen ?? Schwellen())
                         .id(status.schwellen ?? Schwellen())
+                }
+                // Nur mit einem Wächter, der Kontext-Schwellen kennt (sonst schlägt "schwellen setzen" fehl).
+                if let ks = status.kontext_schwellen {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(s.t("app_kontext_schwellen"), systemImage: "text.alignleft").font(.subheadline.bold())
+                        KontextSchwellenBereich(start: ks).id(ks)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Label(s.t("app_hinweise"), systemImage: "info.circle").font(.subheadline.bold())

@@ -80,6 +80,52 @@ struct Schwellen: Codable, Hashable {
     var wochen_reserve: Int = 20
 }
 
+/// v1.4: Kontextfüllstand einer Sitzung (Tokens im Kontext / Kontextfenster des Modells).
+struct Kontext: Decodable {
+    var prozent: Double?
+    var tokens: Double?
+    var fenster: Double?
+    var modell: String?
+    var stufe: String?
+    var stand: Double?
+    var quelle: String?
+
+    enum CodingKeys: String, CodingKey { case prozent, tokens, fenster, modell, stufe, stand, quelle }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        prozent = c.weich(.prozent)
+        tokens = c.weich(.tokens)
+        fenster = c.weich(.fenster)
+        modell = c.weich(.modell)
+        stufe = c.weich(.stufe)
+        stand = c.weich(.stand)
+        quelle = c.weich(.quelle)
+    }
+
+    /// Prozent vom Wächter, sonst aus Tokens und Fenster berechnet.
+    var wert: Double? {
+        if let p = prozent { return p }
+        if let t = tokens, let f = fenster, f > 0 { return t / f * 100 }
+        return nil
+    }
+
+    /// Stufe vom Wächter, sonst aus den Schwellen abgeleitet.
+    func stufeName(_ sw: KontextSchwellen) -> String {
+        if let st = stufe, ["ok", "warnung", "kritisch"].contains(st) { return st }
+        guard let w = wert else { return "ok" }
+        if w >= Double(sw.kritisch) { return "kritisch" }
+        if w >= Double(sw.warnung) { return "warnung" }
+        return "ok"
+    }
+}
+
+/// v1.4: Schwellen für den Kontextfüllstand (Prozent).
+struct KontextSchwellen: Codable, Hashable {
+    var warnung: Int = 70
+    var kritisch: Int = 85
+}
+
 /// v1.4: letzte belegte Aktivität einer Sitzung (Transcript bzw. Codex-Protokoll).
 struct Aktivitaet: Decodable {
     var letzte: Double?
@@ -110,10 +156,15 @@ struct Sitzung: Decodable, Identifiable {
     var lage_text: String?
     var lage_farbe: String?
     var aktivitaet: Aktivitaet?
+    /// v1.4: Kontextfüllstand (nil bei älteren Wächtern oder ohne Messung).
+    var kontext: Kontext?
+    /// Registrierungszeitpunkt der Sitzung (falls der Wächter ihn liefert).
+    var erstellt: Double?
 
     enum CodingKeys: String, CodingKey {
         case anbieter, id, cwd, projekt, status, status_text, zuletzt, wartet, automatisch, fortsetzen_ab,
-             nacht_bis, nacht_eigen, nacht_global, ort, ort_text, faehigkeiten_text, lage, lage_text, lage_farbe, aktivitaet
+             nacht_bis, nacht_eigen, nacht_global, ort, ort_text, faehigkeiten_text, lage, lage_text, lage_farbe, aktivitaet,
+             kontext, erstellt, start
     }
 
     init(from decoder: Decoder) throws {
@@ -139,8 +190,12 @@ struct Sitzung: Decodable, Identifiable {
         lage_text = c.weich(.lage_text)
         lage_farbe = c.weich(.lage_farbe)
         aktivitaet = c.weich(.aktivitaet)
+        kontext = (c.weich(.kontext) as Nachsichtig<Kontext>?)?.wert
+        erstellt = c.weich(.erstellt) ?? c.weich(.start)
     }
 
+    /// Eindeutig über beide Anbieter (IDs könnten sich theoretisch überschneiden).
+    var schluessel: String { anbieter + "-" + id }
     var imNachtmodus: Bool { nacht_bis != nil }
     /// Eigener Nachtmodus dieser Sitzung (nur der lässt sich pro Sitzung ausschalten).
     var eigenerNachtmodus: Bool { nachtGetrennt ? nacht_eigen != nil : nacht_bis != nil }
@@ -233,11 +288,12 @@ struct Status: Decodable {
     var gesamt: Gesamt?
     var offiziell: [String: OffiziellEintrag]?
     var wach: WachInfo?
+    var kontext_schwellen: KontextSchwellen?
 
     enum CodingKeys: String, CodingKey {
         case version, jetzt, sprache, phasen, pausiert, pause_bis, letzter_tick, launchagent, orca_ok,
              nacht, nur_mit_nachtmodus, bericht_uhrzeit, schwellen, sitzungen,
-             orca_vorhanden, nur_orca, statusline, gesamt, offiziell, wach
+             orca_vorhanden, nur_orca, statusline, gesamt, offiziell, wach, kontext_schwellen
     }
 
     init(from decoder: Decoder) throws {
@@ -264,6 +320,7 @@ struct Status: Decodable {
         gesamt = (c.weich(.gesamt) as Nachsichtig<Gesamt>?)?.wert
         offiziell = (c.weich(.offiziell) as [String: Nachsichtig<OffiziellEintrag>]?)?.compactMapValues { $0.wert }
         wach = (c.weich(.wach) as Nachsichtig<WachInfo>?)?.wert
+        kontext_schwellen = c.weich(.kontext_schwellen)
     }
 
     func phase(_ anbieter: String) -> Phase? { phasen?[anbieter] }
