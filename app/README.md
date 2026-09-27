@@ -42,7 +42,7 @@ number once loaded, so `screencapture -o -l <number> shot.png` captures only tha
 With demo data and without screen recording permission:
 
 ```sh
-LimitWaechter --vorschau --demo tests/fixtures/app/status_v14.json [--hell|--dunkel] --bild shot.png
+LimitWaechter --vorschau --demo tests/fixtures/app/status.json [--hell|--dunkel] --bild shot.png
 ```
 
 `--demo` reads the status from the file (all buttons do nothing), `--bild` renders the window to a PNG and quits.

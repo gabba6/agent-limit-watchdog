@@ -59,8 +59,8 @@ class AppTexteTest(unittest.TestCase):
 
 class DemoFixtureTest(unittest.TestCase):
     def setUp(self):
-        self.alt = lies_fixture_json(os.path.join("app", "status.json"))
-        self.neu = lies_fixture_json(os.path.join("app", "status_v14.json"))
+        self.alt = lies_fixture_json(os.path.join("app", "status_v13.json"))
+        self.neu = lies_fixture_json(os.path.join("app", "status.json"))
 
     def test_obermenge_des_alten_vertrags(self):
         self.assertLessEqual(set(self.alt), set(self.neu))
@@ -99,14 +99,14 @@ class AppSelbsttestV14Test(unittest.TestCase):
         if not v or v[-1] != VERSION:
             self.skipTest("App-Build passt nicht zur Version")
         fx = os.path.join(PROJEKT, "tests", "fixtures", "app")
-        r = subprocess.run([app, "--selbsttest", os.path.join(fx, "status_v14.json")],
+        r = subprocess.run([app, "--selbsttest", os.path.join(fx, "status.json")],
                            capture_output=True, text=True, timeout=30)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("gesamt=warnung", r.stdout)
         self.assertIn("quelle claude=offiziell codex=rollout", r.stdout)
         self.assertIn("wach=amphetamine/automatisch", r.stdout)
         self.assertIn("lagen=blockiert,weiter_noetig,wartet,arbeitet", r.stdout)
-        r = subprocess.run([app, "--selbsttest", os.path.join(fx, "status.json")],
+        r = subprocess.run([app, "--selbsttest", os.path.join(fx, "status_v13.json")],
                            capture_output=True, text=True, timeout=30)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("gesamt=", r.stdout)
