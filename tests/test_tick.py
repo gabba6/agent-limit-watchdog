@@ -103,6 +103,8 @@ class TickTest(TempHome):
 
     def test_arbeitet_schon(self):
         self.orca._agenten["tA:lA"] = {"state": "working"}
+        # v1.4: Orcas "working" allein genügt nicht mehr; der Bildschirm muss es bestätigen
+        self.orca.bildschirme["term_A"] = bildschirm("claude_arbeitet.txt")
         self.sitzung_anlegen(status="gestoppt", reset=self.now - 180)
         self.lauf(nutzung(5, self.now + 5 * 3600, stand=self.now))
         self.assertEqual(self.orca.gesendet, [])

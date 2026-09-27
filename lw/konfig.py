@@ -44,6 +44,9 @@ STANDARD = {
         "codex_queue": False,                     # v1.3: Codex außerhalb von Orca per `codex queue` stoppen/fortsetzen
                                                   # (nicht echt getestet -> Standard aus, dann nur Warnung/Push)
         "pruefen_nach_minuten": 2,
+        "belege_pruefen": True,                   # v1.4 B: Orca-"working" nur mit Belegen (Bildschirm/Transcript) glauben
+        "aktiv_frist_minuten": 10,                # v1.4 B: letzter Protokolleintrag jünger -> Turn gilt als laufend
+        "max_nachpruefungen": 3,                  # v1.4 B: "läuft bereits" ohne Beleg -> zurück ins Warten, danach blockiert
     },
     "daten": {
         "orca": "/Applications/Orca.app/Contents/Resources/bin/orca",
@@ -370,6 +373,19 @@ PRUEF_ZUSATZ.append(_pruefen_daten)
 # ======== v1.4 A Ende ========
 
 # ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+def _pruefen_b(k):
+    f = k["fortsetzen"]
+    fehler = []
+    for name, grenzen in (("aktiv_frist_minuten", (1, 1440)), ("max_nachpruefungen", (0, 20))):
+        wert = f.get(name)
+        if isinstance(wert, bool) or not isinstance(wert, int) or not grenzen[0] <= wert <= grenzen[1]:
+            fehler.append(sprache.t("fs_kf_bereich", name=f"fortsetzen.{name}", min=grenzen[0], max=grenzen[1]))
+    if not isinstance(f.get("belege_pruefen"), bool):
+        fehler.append(sprache.t("fs_kf_bool", name="fortsetzen.belege_pruefen"))
+    return fehler
+
+
+PRUEF_ZUSATZ.append(_pruefen_b)
 
 # ======== v1.4 B Ende ========
 
