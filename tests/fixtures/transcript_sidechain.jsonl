@@ -1,0 +1,7 @@
+{"type": "assistant", "isSidechain": false, "timestamp": "2026-09-27T04:07:17.733Z", "sessionId": "sess-demo", "message": {"role": "assistant", "content": [{"type": "text", "text": "..."}]}}
+{"type": "system", "subtype": "stop_hook_summary", "isSidechain": false, "timestamp": "2026-09-27T04:07:17.846Z", "sessionId": "sess-demo"}
+{"type": "system", "subtype": "turn_duration", "isMeta": false, "isSidechain": false, "durationMs": 172000, "timestamp": "2026-09-27T04:07:17.885Z", "sessionId": "sess-demo"}
+{"type": "assistant", "isSidechain": true, "timestamp": "2026-09-27T05:35:00.000Z", "sessionId": "sess-demo", "message": {"role": "assistant", "content": [{"type": "text", "text": "..."}]}}
+{"type": "user", "isSidechain": true, "timestamp": "2026-09-27T05:35:05.000Z", "sessionId": "sess-demo", "message": {"role": "user", "content": [{"type": "tool_result", "content": "..."}]}}
+{"type": "user", "isSidechain": false, "isMeta": true, "timestamp": "2026-09-27T05:35:10.000Z", "sessionId": "sess-demo", "message": {"role": "user", "content": "<local-command-caveat>"}}
+{"type": "queue-operation", "operation": "dequeue", "timestamp": "2026-09-27T05:35:12.000Z", "sessionId": "sess-demo"}

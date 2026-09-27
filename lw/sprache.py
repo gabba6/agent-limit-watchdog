@@ -618,6 +618,29 @@ TEXTE = {
     # ======== v1.4 A Ende ========
 
     # ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+    "fs_aktion_nachpruefen": {"de": "LÄUFT OFFENBAR {s} ({grund}) – wird nachgeprüft",
+                              "en": "APPARENTLY RUNNING {s} ({grund}) – will be re-checked"},
+    "fs_aktion_zurueck": {"de": "NACHPRÜFUNG {s}: keine Aktivität seit dem Reset – zurück ins Warten, neuer Versuch",
+                          "en": "RE-CHECK {s}: no activity since the reset – back to waiting, trying again"},
+    "fs_log_orca_widerspruch": {"de": "{s}: Orca meldet „working“, Bildschirm und Protokoll sagen {urteil} – Orca ignoriert",
+                                "en": "{s}: Orca reports \"working\", screen and log say {urteil} – ignoring Orca"},
+    "fs_log_nachpruefung": {"de": "{s}: {anzahl} Nachprüfungen ohne Aktivität – blockiert",
+                            "en": "{s}: {anzahl} re-checks without activity – blocked"},
+    "fs_grund_unklar": {"de": "läuft laut Orca, aber seit dem Reset keine Aktivität",
+                        "en": "running according to Orca, but no activity since the reset"},
+    "fs_kf_bereich": {"de": "{name} muss eine ganze Zahl von {min} bis {max} sein",
+                      "en": "{name} must be a whole number from {min} to {max}"},
+    "fs_kf_bool": {"de": "{name} muss true oder false sein", "en": "{name} must be true or false"},
+    "fs_lage_arbeitet": {"de": "arbeitet", "en": "working"},
+    "fs_lage_ruht": {"de": "ruht", "en": "idle"},
+    "fs_lage_sichert": {"de": "sichert", "en": "checkpointing"},
+    "fs_lage_wartet": {"de": "wartet", "en": "waiting"},
+    "fs_lage_wartet_bis": {"de": "wartet bis {zeit}", "en": "waiting until {zeit}"},
+    "fs_lage_wartet_bis_weiter": {"de": "wartet bis {zeit} – dann „weiter“", "en": "waiting until {zeit} – then \"continue\""},
+    "fs_lage_pruefung": {"de": "wird geprüft", "en": "being checked"},
+    "fs_lage_weiter_noetig": {"de": "„weiter“ nötig", "en": "\"continue\" needed"},
+    "fs_lage_blockiert": {"de": "blockiert", "en": "blocked"},
+    "fs_lage_beendet": {"de": "beendet", "en": "ended"},
 
     # ======== v1.4 B Ende ========
 

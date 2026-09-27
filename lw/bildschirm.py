@@ -52,6 +52,7 @@ STALE = [r"press enter to continue"]
 
 BESCHAEFTIGT = [
     r"esc to interrupt", r"ctrl\+c to interrupt",
+    r"ctrl\+b to run in background",       # v1.4: Vordergrund-Bash läuft noch
     r"^\s*[✻✶✢✳✽✺✹·*]\s*\S+…",           # Claude 2.1.283: "✻ Thundering… (36m 32s · ↓ 210k tokens)"
     r"^\s*[•◦·]\s*Working\b", r"\bWorking \(\d",   # Codex
 ]

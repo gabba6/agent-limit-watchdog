@@ -524,6 +524,59 @@ def main(argv=None):
 # ======== v1.4 A Ende ========
 
 # ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+from . import aktivitaet  # noqa: E402  (v1.4 B, im Markerblock statt im Modulkopf)
+
+LAGE_FARBE = {"arbeitet": "gruen", "ruht": "grau", "sichert": "gelb", "wartet": "blau", "pruefung": "blau",
+              "weiter_noetig": "orange", "blockiert": "rot", "beendet": "grau"}
+
+
+def _lage_aktivitaet(x, k, now):
+    """Letzte Aktivität aus Transcript/rollout (nur Schwanz lesen) – nicht für beendete oder alte Sitzungen."""
+    if x.get("status") == "beendet" or now - (x.get("zuletzt") or 0) >= 2 * 86400:
+        return None
+    try:
+        if x.get("anbieter") == "codex":
+            return aktivitaet.codex(k, x.get("id"), 0, now)
+        return aktivitaet.claude(x.get("transcript"), 0, now)
+    except (OSError, ValueError):
+        return None
+
+
+def lage(x, k, now, automatisch_=None):
+    """-> (lage, lage_text, beleg) einer Sitzung für die App."""
+    status = x.get("status")
+    beleg = _lage_aktivitaet(x, k, now)
+    if status in register.WARTET:
+        ab = x.get("fortsetzen_ab")
+        if not ab:
+            return "wartet", t("fs_lage_wartet"), beleg
+        schluessel = "fs_lage_wartet_bis" if automatisch_ is not False else "fs_lage_wartet_bis_weiter"
+        return "wartet", t(schluessel, zeit=util.uhrzeit(ab, now)), beleg
+    if status == "wartet_auf_weiter":
+        return "weiter_noetig", t("fs_lage_weiter_noetig"), beleg
+    if status in ("blockiert", "aufgegeben", "reserve"):
+        return "blockiert", t("fs_lage_blockiert"), beleg
+    if status == "sicherung":
+        return "sichert", t("fs_lage_sichert"), beleg
+    if status == "fortgesetzt" and x.get("geprueft") is False:
+        return "pruefung", t("fs_lage_pruefung"), beleg
+    if status == "beendet":
+        return "beendet", t("fs_lage_beendet"), beleg
+    frist = k["fortsetzen"].get("aktiv_frist_minuten", 10) * 60
+    if beleg and beleg.get("turn_offen") and beleg.get("letzte") and now - beleg["letzte"] < frist:
+        return "arbeitet", t("fs_lage_arbeitet"), beleg
+    return "ruht", t("fs_lage_ruht"), beleg
+
+
+def _sitzung_json_b(eintrag, x, k, now):
+    name, text, beleg = lage(x, k, now, eintrag.get("automatisch"))
+    eintrag["lage"] = name
+    eintrag["lage_text"] = text
+    eintrag["lage_farbe"] = LAGE_FARBE[name]
+    eintrag["aktivitaet"] = {"letzte": (beleg or {}).get("letzte"), "quelle": (beleg or {}).get("quelle")}
+
+
+SITZUNG_JSON_ZUSATZ.append(_sitzung_json_b)
 
 # ======== v1.4 B Ende ========
 

@@ -143,6 +143,15 @@ def _rollout_anlegen(ordner, tid, cwd, now):
     return datei
 
 
+def _protokoll_anhaengen(transcript, rollout, zeit):
+    iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(zeit))
+    with open(transcript, "a") as f:
+        f.write(json.dumps({"type": "assistant", "isSidechain": False, "timestamp": iso,
+                            "message": {"content": [{"type": "text", "text": "..."}]}}) + "\n")
+    with open(rollout, "a") as f:
+        f.write(json.dumps({"timestamp": iso, "type": "event_msg", "payload": {"type": "task_started"}}) + "\n")
+
+
 def zyklus(ausgabe=True):
     """Kompletter Probelauf. Gibt die Ergebnisse je Schritt zurück (auch für Tests)."""
     k = konfig.laden()
@@ -160,7 +169,7 @@ def zyklus(ausgabe=True):
         tid = "01a0ffff-0000-7000-8000-00000000c0de"
         util.schreib_json(k["daten"]["orca_hook_status"], {"entries": {"p": {
             "paneKey": "tabX:leafX", "source": "codex", "providerSession": {"id": tid}}}})
-        _rollout_anlegen(k["daten"]["codex_sessions"], tid, projekt, start)
+        rollout = _rollout_anlegen(k["daten"]["codex_sessions"], tid, projekt, start)
         terminals = [
             {"handle": "term_A", "agentIdentity": "claude", "tabId": "tabA", "leafId": "leafA", "worktreePath": projekt},
             {"handle": "term_B", "agentIdentity": "claude", "tabId": "tabB", "leafId": "leafB", "worktreePath": projekt},
@@ -259,6 +268,8 @@ def zyklus(ausgabe=True):
         #    Fortsetzung, C (kein Nachtmodus) bekommt nichts gesendet -> wartet auf "weiter", ein Push
         neues_fenster = reset + 5 * 3600
         schritt("s5", reset + 180, 0, 0, fenster_reset=neues_fenster)
+        # v1.4: die fortgesetzten Sitzungen arbeiten wieder -> neue Protokolleinträge als Beleg für die Nachprüfung
+        _protokoll_anhaengen(os.path.join(tmp, "session-A.jsonl"), rollout, reset + 200)
         orca.bildschirme["term_A"] = CLAUDE_ARBEITET
         orca._agenten["tabA:leafA"] = {"state": "working"}
         # 6. Reset + 6 min: B ist fällig, am Bildschirm steht das Kaufmenü -> nichts senden, Push

@@ -66,6 +66,12 @@ uhrzeit = "08:00"                      # only sent if something happened overnig
 # ======== v1.4 A Ende ========
 
 # ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+[fortsetzen]
+belege_pruefen = true                  # trust Orca's "working" only with evidence (screen, transcript, rollout);
+                                       # a "running already" without evidence is re-checked after pruefen_nach_minuten
+aktiv_frist_minuten = 10               # a transcript/rollout entry younger than this counts as a running turn
+max_nachpruefungen = 3                 # per session and window: "running already" without activity -> back to
+                                       # waiting and try again; after that many re-checks: blocked + notification
 
 # ======== v1.4 B Ende ========
 

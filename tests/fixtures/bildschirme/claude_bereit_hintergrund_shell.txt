@@ -1,0 +1,10 @@
+⏺ The plan is updated. The PDF stays unchanged as a dated snapshot, like in the previous stages.
+⏺ Bash(until [ -e /tmp/demo/ready.flag ]; do sleep 5; done)
+  ⎿  Running in the background (↓ to manage)
+⏺ The check runs in the background and reports back as soon as the device is unlocked.
+✻ Worked for 29s · done 6:07 AM
+                                                                                                             n
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · ← for agents

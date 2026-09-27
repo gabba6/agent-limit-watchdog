@@ -1,0 +1,17 @@
+{"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-09-27T04:02:50.413Z", "sessionId": "sess-demo", "content": "..."}
+{"type": "user", "isSidechain": false, "timestamp": "2026-09-27T04:04:25.354Z", "sessionId": "sess-demo", "message": {"role": "user", "content": "Bitte weiter mit dem Plan."}}
+{"type": "attachment", "isSidechain": false, "timestamp": "2026-09-27T04:04:25.331Z", "sessionId": "sess-demo"}
+{"type": "assistant", "isSidechain": false, "timestamp": "2026-09-27T04:04:49.925Z", "sessionId": "sess-demo", "message": {"role": "assistant", "content": [{"type": "text", "text": "..."}]}}
+{"type": "user", "isSidechain": false, "timestamp": "2026-09-27T04:05:12.061Z", "sessionId": "sess-demo", "message": {"role": "user", "content": [{"type": "tool_result", "content": "..."}]}}
+{"type": "assistant", "isSidechain": false, "timestamp": "2026-09-27T04:06:39.456Z", "sessionId": "sess-demo", "message": {"role": "assistant", "content": [{"type": "text", "text": "..."}]}}
+{"type": "user", "isSidechain": false, "isMeta": true, "timestamp": "2026-09-27T04:06:39.599Z", "sessionId": "sess-demo", "message": {"role": "user", "content": "Stop hook feedback"}}
+{"type": "system", "subtype": "stop_hook_summary", "isSidechain": false, "timestamp": "2026-09-27T04:06:39.601Z", "sessionId": "sess-demo"}
+{"type": "assistant", "isSidechain": false, "timestamp": "2026-09-27T04:06:46.658Z", "sessionId": "sess-demo", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "...", "run_in_background": true}}]}}
+{"type": "user", "isSidechain": false, "timestamp": "2026-09-27T04:06:55.942Z", "sessionId": "sess-demo", "message": {"role": "user", "content": [{"type": "tool_result", "content": "Command running in background"}]}}
+{"type": "assistant", "isSidechain": false, "timestamp": "2026-09-27T04:07:17.733Z", "sessionId": "sess-demo", "message": {"role": "assistant", "content": [{"type": "text", "text": "..."}]}}
+{"type": "attachment", "isSidechain": false, "timestamp": "2026-09-27T04:07:17.787Z", "sessionId": "sess-demo"}
+{"type": "system", "subtype": "stop_hook_summary", "isSidechain": false, "timestamp": "2026-09-27T04:07:17.846Z", "sessionId": "sess-demo"}
+{"type": "system", "subtype": "turn_duration", "isMeta": false, "isSidechain": false, "durationMs": 172000, "timestamp": "2026-09-27T04:07:17.885Z", "sessionId": "sess-demo"}
+{"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-09-27T05:40:04.567Z", "sessionId": "sess-demo", "content": "..."}
+{"type": "attachment", "isSidechain": false, "timestamp": "2026-09-27T05:40:04.600Z", "sessionId": "sess-demo"}
+{"type": "last-prompt", "timestamp": "2026-09-27T05:41:00.000Z", "sessionId": "sess-demo"}

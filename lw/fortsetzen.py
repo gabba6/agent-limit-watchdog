@@ -8,6 +8,10 @@ Reihenfolge je wartender Sitzung (nach resets_at + Puffer, Wochenreserve beachte
   Terminal fehlt, Session-ID bekannt -> neues Orca-Terminal mit claude --resume / codex resume
 Höchstens max_pro_fenster automatische Fortsetzungen je Sitzung und Fenster, danach Push.
 
+v1.4: Orcas "working" allein reicht nie mehr als Beleg. Entschieden wird nach Bildschirm plus Transcript bzw.
+rollout (lw/aktivitaet.py); ein "läuft bereits" ohne Beleg wird nach pruefen_nach_minuten nachgeprüft und geht
+ohne neue Aktivität zurück ins Warten.
+
 Außerhalb von Orca (v1.3, Ort terminal/desktop) wird nie getippt, nie ein Bildschirm gelesen und nie ein
 Terminal geöffnet: Codex im Terminal per `codex queue` (wenn eingeschaltet), sonst Status wartet_auf_weiter
 und Push mit Kopierbefehl.
@@ -17,7 +21,7 @@ import os
 import shlex
 import subprocess
 
-from . import bildschirm, orte, quellen, register, texte, util
+from . import aktivitaet, bildschirm, orte, quellen, register, texte, util
 from .sprache import t
 from .orca import OrcaFehler, pane_key
 
@@ -130,22 +134,52 @@ def _blockiert(ctx, s, grund, art):
     return "blockiert"
 
 
+def _belege_pruefen(k):
+    return bool(k["fortsetzen"].get("belege_pruefen", True))
+
+
+def _als_laeuft(ctx, s, handle, grund):
+    """Läuft offenbar schon (Bildschirm arbeitet o. ä.), aber ohne Beleg: in pruefen_nach_minuten nachsehen.
+    Zählt nicht als Versuch."""
+    now = ctx.now
+    _setze(s, "fortgesetzt", "läuft bereits – wird nachgeprüft", terminal=handle, laeuft_ungeprueft=True,
+           geprueft=False, pruefen_ab=now + ctx.k["fortsetzen"]["pruefen_nach_minuten"] * 60,
+           beleg_seit=aktivitaet.seit_fuer(s))
+    ctx.aktion(t("fs_aktion_nachpruefen", s=_kurz(s), grund=grund))
+    return "laeuft"
+
+
 def _im_terminal(ctx, s, term):
     k, now = ctx.k, ctx.now
     fid = s.get("fenster_id")
     handle = term["handle"]
     zustand = ctx.agent_zustand(term)
-    if zustand == "working":
+    belegen = _belege_pruefen(k)
+    if zustand == "working" and not belegen:        # Verhalten bis 1.3
         _setze(s, "fortgesetzt", "läuft bereits (eingebaute Fortsetzung oder von Hand)", terminal=handle)
         ctx.aktion(t("aktion_laeuft", s=_kurz(s)))
         return "laeuft"
     try:
         bild = ctx.orca.bildschirm(handle)
     except OrcaFehler as e:
+        if zustand == "working":
+            return _als_laeuft(ctx, s, handle, t("grund_bild", fehler=e))
         return _blockiert(ctx, s, t("grund_bild", fehler=e), "unbekannt")
     art, grund = bildschirm.klassifiziere(bild["zeilen"], s["anbieter"])
     util.log(t("log_bildschirm", s=_kurz(s), art=art, grund=grund, ausschnitt=bildschirm.ausschnitt(bild["zeilen"])))
-    if art == "beschaeftigt":
+    if belegen:
+        beleg = aktivitaet.belege(ctx, s, aktivitaet.seit_fuer(s))
+        u = aktivitaet.urteil(art, beleg, now, k["fortsetzen"].get("aktiv_frist_minuten", 10) * 60)
+        if zustand == "working" and u in ("bereit", "schon_fortgesetzt"):
+            util.log(t("fs_log_orca_widerspruch", s=_kurz(s), urteil=u))
+        if u == "arbeitet":
+            return _als_laeuft(ctx, s, handle, grund)
+        if u == "schon_fortgesetzt":
+            _setze(s, "fortgesetzt", "läuft bereits (Aktivität seit Reset belegt)", terminal=handle, geprueft=True,
+                   laeuft_ungeprueft=False)
+            ctx.aktion(t("aktion_laeuft", s=_kurz(s)))
+            return "laeuft"
+    elif art == "beschaeftigt":
         _setze(s, "fortgesetzt", "läuft bereits", terminal=handle)
         return "laeuft"
     if art == "eingebaut_wartet" and s["anbieter"] == "claude" \
@@ -166,7 +200,8 @@ def _im_terminal(ctx, s, term):
     register.aktualisieren(s["anbieter"], s["id"], zaehlen)
     if ergebnis.get("angenommen"):
         _setze(s, "fortgesetzt", f"{weg} gesendet", terminal=handle,
-               pruefen_ab=now + k["fortsetzen"]["pruefen_nach_minuten"] * 60, geprueft=False)
+               pruefen_ab=now + k["fortsetzen"]["pruefen_nach_minuten"] * 60, geprueft=False,
+               laeuft_ungeprueft=False, beleg_seit=now)
         util.ereignis("fortgesetzt", anbieter=s["anbieter"], sitzung=s["id"], cwd=s.get("cwd"), weg=weg,
                       dry_run=ctx.dry_run)
         ctx.aktion(t("aktion_fortgesetzt", s=_kurz(s), weg=weg))
@@ -209,7 +244,8 @@ def codex_queue(ctx, sid, text):
 def _codex_queue(ctx, s, pruefen_s=120):
     if not codex_queue(ctx, s["id"], texte.fortsetzungsprompt()):
         return False
-    _setze(s, "fortgesetzt", "codex queue", pruefen_ab=ctx.now + pruefen_s, geprueft=False)
+    _setze(s, "fortgesetzt", "codex queue", pruefen_ab=ctx.now + pruefen_s, geprueft=False,
+           laeuft_ungeprueft=False, beleg_seit=ctx.now)
     util.ereignis("fortgesetzt", anbieter="codex", sitzung=s["id"], cwd=s.get("cwd"), weg="codex queue")
     ctx.aktion(t("aktion_fortgesetzt", s=_kurz(s), weg="codex queue"))
     return True
@@ -248,7 +284,8 @@ def _neu_starten(ctx, s):
             letzter = str(e)
             continue
         _setze(s, "fortgesetzt", "neues Terminal mit --resume", terminal=r.get("handle"),
-               pruefen_ab=now + max(3, f["pruefen_nach_minuten"]) * 60, geprueft=False)
+               pruefen_ab=now + max(3, f["pruefen_nach_minuten"]) * 60, geprueft=False,
+               laeuft_ungeprueft=False, beleg_seit=now)
         util.ereignis("fortgesetzt", anbieter=s["anbieter"], sitzung=s["id"], cwd=cwd, weg=t("weg_neu"),
                       dry_run=ctx.dry_run)
         ctx.aktion(t("aktion_neu", s=_kurz(s), sel=sel))
@@ -266,6 +303,14 @@ def pruefen(ctx, s):
             _setze(s, "fortgesetzt", "Terminal nach Fortsetzung nicht gefunden", geprueft=True)
             ctx.melder.senden(t("push_verloren", n=texte.NAME[s["anbieter"]]), prio=4, schluessel=f"verloren:{s['id']}:{s.get('fenster_id')}")
         return
+    if not _belege_pruefen(ctx.k):
+        _pruefen_alt(ctx, s, term)
+        return
+    _pruefen_belegt(ctx, s, term)
+
+
+def _pruefen_alt(ctx, s, term):
+    """Verhalten bis 1.3 (belege_pruefen = false)."""
     if ctx.agent_zustand(term) == "working":
         _setze(s, "fortgesetzt", "Prüfung: arbeitet", geprueft=True, terminal=term["handle"])
         return
@@ -275,12 +320,74 @@ def pruefen(ctx, s):
         return
     art, grund = bildschirm.klassifiziere(bild["zeilen"], s["anbieter"])
     if art in ("menue", "geld", "eingabe_belegt", "unbekannt", "stale"):
-        util.log(t("log_pruefung", s=_kurz(s), art=art, ausschnitt=bildschirm.ausschnitt(bild["zeilen"])))
-        _setze(s, "fortgesetzt", f"Prüfung: {grund}", geprueft=True, terminal=term["handle"])
-        util.ereignis("haengt", anbieter=s["anbieter"], sitzung=s["id"], cwd=s.get("cwd"), grund=grund)
-        ctx.melder.senden(t("push_haengt", n=texte.NAME[s["anbieter"]]), prio=4, schluessel=f"haengt:{s['id']}:{s.get('fenster_id')}")
+        _haengt(ctx, s, term, bild, art, grund)
     else:
         _setze(s, "fortgesetzt", f"Prüfung: {grund}", geprueft=True, terminal=term["handle"])
+
+
+def _haengt(ctx, s, term, bild, art, grund):
+    util.log(t("log_pruefung", s=_kurz(s), art=art, ausschnitt=bildschirm.ausschnitt(bild["zeilen"])))
+    _setze(s, "fortgesetzt", f"Prüfung: {grund}", geprueft=True, laeuft_ungeprueft=False, terminal=term["handle"])
+    util.ereignis("haengt", anbieter=s["anbieter"], sitzung=s["id"], cwd=s.get("cwd"), grund=grund)
+    ctx.melder.senden(t("push_haengt", n=texte.NAME[s["anbieter"]]), prio=4, schluessel=f"haengt:{s['id']}:{s.get('fenster_id')}")
+
+
+def nachpruefungen(d, fid):
+    return int((d.get("nachpruefungen") or {}).get(fid or "-", 0))
+
+
+def _pruefen_belegt(ctx, s, term):
+    """v1.4: Nachprüfung mit Belegen. Neue Aktivität seit Reset bzw. Senden -> geprüft; Bildschirm arbeitet ->
+    später erneut ansehen; Bildschirm bereit ohne Aktivität -> zurück ins Warten (nächster Tick versucht erneut,
+    höchstens max_nachpruefungen Mal je Fenster, danach blockiert)."""
+    k, now = ctx.k, ctx.now
+    f = k["fortsetzen"]
+    fid = s.get("fenster_id")
+    handle = term["handle"]
+    ungeprueft = bool(s.get("laeuft_ungeprueft"))
+    seit = s.get("beleg_seit") or (aktivitaet.seit_fuer(s) if ungeprueft else (s.get("status_seit") or now))
+    beleg = aktivitaet.belege(ctx, s, seit)
+    if beleg and beleg.get("neu"):
+        _setze(s, "fortgesetzt", "Prüfung: arbeitet (belegt)", geprueft=True, laeuft_ungeprueft=False,
+               terminal=handle)
+        return
+    try:
+        bild = ctx.orca.bildschirm(handle)
+    except OrcaFehler:
+        return                       # nächster Tick sieht erneut nach (pruefen_ab bleibt erreicht)
+    art, grund = bildschirm.klassifiziere(bild["zeilen"], s["anbieter"])
+    if art == "beschaeftigt":
+        # Spinner ohne neuen Protokolleintrag ist bei langem Vordergrund-Bash normal: später erneut ansehen.
+        # Zählt nicht als Nachprüfung, damit echte lange Arbeit nie als blockiert gemeldet wird.
+        register.aktualisieren(s["anbieter"], s["id"], lambda d: d.update(
+            pruefen_ab=now + f["pruefen_nach_minuten"] * 60, terminal=handle))
+        return
+    if art in ("menue", "geld", "eingabe_belegt", "unbekannt", "stale"):
+        _haengt(ctx, s, term, bild, art, grund)
+        return
+    if art != "bereit" or (beleg is None and not ungeprueft):
+        # eingebaut_wartet, oder nach echtem Senden ohne lesbares Protokoll: wie bis 1.3 abschließen
+        _setze(s, "fortgesetzt", f"Prüfung: {grund}", geprueft=True, laeuft_ungeprueft=False, terminal=handle)
+        return
+    # Eingabe bereit und seit dem Reset bzw. Senden keine Aktivität: es läuft nichts
+    if nachpruefungen(s, fid) >= f.get("max_nachpruefungen", 3):
+        util.log(t("fs_log_nachpruefung", s=_kurz(s), anzahl=nachpruefungen(s, fid)))
+        _blockiert(ctx, s, t("fs_grund_unklar"), "unbekannt")
+        return
+
+    def zurueck(d):
+        d["status"] = "gestoppt"
+        d["fortsetzen_ab"] = now
+        d["laeuft_ungeprueft"] = False
+        d.setdefault("nachpruefungen", {})[fid or "-"] = nachpruefungen(d, fid) + 1
+        if len(d["nachpruefungen"]) > 6:
+            for alt in sorted(d["nachpruefungen"])[:-6]:
+                d["nachpruefungen"].pop(alt, None)
+        for feld in ("geprueft", "pruefen_ab", "beleg_seit"):
+            d.pop(feld, None)
+    register.aktualisieren(s["anbieter"], s["id"], zurueck, "Nachprüfung: keine Aktivität seit Reset")
+    util.ereignis("nachpruefung", anbieter=s["anbieter"], sitzung=s["id"], cwd=s.get("cwd"))
+    ctx.aktion(t("fs_aktion_zurueck", s=_kurz(s)))
 
 
 def _codex_info(ctx, s):
