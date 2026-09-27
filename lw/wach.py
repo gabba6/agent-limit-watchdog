@@ -37,10 +37,6 @@ TIMEOUT = 10
 # `wach an|aus` so sicher unter dem Zeitlimit der App (Befehle.wachZeitlimit = 180 s).
 DIALOG_AUFGEBEN_S = 110
 DIALOG_TIMEOUT = 120
-# Passwortdialog schließt sich nach DIALOG_AUFGEBEN_S selbst; zusammen mit den übrigen Aufrufen bleibt
-# `wach an|aus` so sicher unter dem Zeitlimit der App (Befehle.wachZeitlimit = 180 s).
-DIALOG_AUFGEBEN_S = 110
-DIALOG_TIMEOUT = 120
 PROBE_TIMEOUT = 60      # erste Automation-Anfrage: macOS fragt nach, der Nutzer braucht einen Moment
 AN = ("an", "on", "ein")
 AUS = ("aus", "off")

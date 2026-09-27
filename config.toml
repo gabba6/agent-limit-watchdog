@@ -37,6 +37,11 @@ codex_stopp_senden = true              # in the stop phase, send a short message
 codex_queue = false                    # experimental, not verified yet: Codex outside Orca gets the stop message and
                                        # the continuation via `codex queue` (text only); false = only warn and notify
 pruefen_nach_minuten = 2               # check a few minutes later whether the continuation got stuck
+belege_pruefen = true                  # trust Orca's "working" only with evidence (screen, transcript, rollout);
+                                       # a "running already" without evidence is re-checked after pruefen_nach_minuten
+aktiv_frist_minuten = 10               # a transcript/rollout entry younger than this counts as a running turn
+max_nachpruefungen = 3                 # per session and window: "running already" without activity -> back to
+                                       # waiting and try again; after that many re-checks: blocked + notification
 
 [daten]                                # data sources
 orca = "/Applications/Orca.app/Contents/Resources/bin/orca"
@@ -44,6 +49,18 @@ codex_sessions = "~/.codex/sessions"
 orca_hook_status = "~/Library/Application Support/orca/agent-hooks/last-status.json"
 max_alter_minuten = 30                 # older usage data is shown as stale
 hook_zustand_max_alter_minuten = 10    # if the state is older (watchdog not running), the hooks do nothing
+# official usage (same numbers as Claude Desktop / ChatGPT; read-only request, no model call;
+# the login token is read at runtime and never stored or logged). Since 1.4.
+offiziell = true                       # fetch the official usage; false = only Orca / status line / Codex log
+offiziell_intervall_minuten = 3        # how often to fetch
+offiziell_intervall_eng_minuten = 1    # during warning/stop/limit or when a continuation is due soon
+offiziell_max_alter_minuten = 10       # younger official data always wins over the other sources
+offiziell_timeout_sekunden = 8
+claude_usage_url = "https://api.anthropic.com/api/oauth/usage"
+codex_usage_url = "https://chatgpt.com/backend-api/wham/usage"
+claude_schluesselbund_dienst = "Claude Code-credentials"   # keychain item Claude Code created (read only)
+codex_auth = "~/.codex/auth.json"      # Codex login file (read only)
+frueh_reset_abfall = 20                # percentage points: a drop this large before the reset counts as an early reset
 
 [melden]                               # notifications
 ntfy = true
@@ -57,38 +74,7 @@ nachlauf_minuten = 15
 max_stunden_voraus = 12                # only keep awake for continuations within the next 12 hours
 remote_modus_pruefen = true            # at night, warn if the Mac would sleep with the lid closed or runs on battery
 remote_modus_befehl = ""               # command shown in that warning; empty (or its script is gone) = "waechter.py awake on"
-
-[bericht]                              # morning report
-uhrzeit = "08:00"                      # only sent if something happened overnight; night mode ends at this time
-
-# ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
-[daten]                                # official usage (same numbers as Claude Desktop / ChatGPT; read-only request,
-                                       # no model call; the login token is read at runtime and never stored or logged)
-offiziell = true                       # fetch the official usage; false = only Orca / status line / Codex log
-offiziell_intervall_minuten = 3        # how often to fetch
-offiziell_intervall_eng_minuten = 1    # during warning/stop/limit or when a continuation is due soon
-offiziell_max_alter_minuten = 10       # younger official data always wins over the other sources
-offiziell_timeout_sekunden = 8
-claude_usage_url = "https://api.anthropic.com/api/oauth/usage"
-codex_usage_url = "https://chatgpt.com/backend-api/wham/usage"
-claude_schluesselbund_dienst = "Claude Code-credentials"   # keychain item Claude Code created (read only)
-codex_auth = "~/.codex/auth.json"      # Codex login file (read only)
-frueh_reset_abfall = 20                # percentage points: a drop this large before the reset counts as an early reset
-
-# ======== v1.4 A Ende ========
-
-# ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
-[fortsetzen]
-belege_pruefen = true                  # trust Orca's "working" only with evidence (screen, transcript, rollout);
-                                       # a "running already" without evidence is re-checked after pruefen_nach_minuten
-aktiv_frist_minuten = 10               # a transcript/rollout entry younger than this counts as a running turn
-max_nachpruefungen = 3                 # per session and window: "running already" without activity -> back to
-                                       # waiting and try again; after that many re-checks: blocked + notification
-
-# ======== v1.4 B Ende ========
-
-# ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
-[wach]                                 # keep-awake mode (v1.4), see also the [wach] section above
+# since 1.4: awake mode (waechter.py awake on|off|status) and automatic keep-awake
 amphetamine = true                     # use Amphetamine if installed (otherwise caffeinate only, which needs power)
 amphetamine_zugeklappt = true          # own Amphetamine sessions keep the Mac awake with the lid closed
 bei_nachtmodus = true                  # keep the Mac awake automatically while night mode is on (no password)
@@ -96,8 +82,5 @@ sperre_standard = 300                  # screen lock delay in seconds restored b
 remote_alt_zustand = ""                # optional: state file of an older keep-awake script, read once (never changed);
                                        # empty = ".vorherige-sperre" next to the script in remote_modus_befehl
 
-# ======== v1.4 C Ende ========
-
-# ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
-
-# ======== v1.4 D Ende ========
+[bericht]                              # morning report
+uhrzeit = "08:00"                      # only sent if something happened overnight; night mode ends at this time

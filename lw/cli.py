@@ -525,7 +525,7 @@ def main(argv=None):
     return args.f(args, k)
 
 
-# ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+# ---- v1.4: Füllstand (offizielle Nutzungsanzeige) ----
 from . import nutzung  # noqa: E402
 
 STUFEN_GESAMT = ("ok", "warnung", "stopp", "limit")
@@ -620,9 +620,8 @@ def _status_text_a(k, now, daten):
 STATUS_JSON_ZUSATZ.append(_status_json_a)
 STATUS_TEXT_ZUSATZ.append(_status_text_a)
 
-# ======== v1.4 A Ende ========
 
-# ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+# ---- v1.4: Fortsetzen mit Belegen ----
 from . import aktivitaet  # noqa: E402  (v1.4 B, im Markerblock statt im Modulkopf)
 
 LAGE_FARBE = {"arbeitet": "gruen", "ruht": "grau", "sichert": "gelb", "wartet": "blau", "pruefung": "blau",
@@ -677,9 +676,8 @@ def _sitzung_json_b(eintrag, x, k, now):
 
 SITZUNG_JSON_ZUSATZ.append(_sitzung_json_b)
 
-# ======== v1.4 B Ende ========
 
-# ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+# ---- v1.4: Wach-Modus ----
 def cmd_wach(args, k):
     """wach an|aus|status (en: awake on|off|status) – ersetzt das frühere remote.sh."""
     now = util.jetzt()
@@ -734,12 +732,6 @@ def _status_text_wach(k, now, daten):
 PARSER_ZUSATZ.append(_parser_wach)
 STATUS_JSON_ZUSATZ.append(_status_json_wach)
 STATUS_TEXT_ZUSATZ.append(_status_text_wach)
-
-# ======== v1.4 C Ende ========
-
-# ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
-
-# ======== v1.4 D Ende ========
 
 
 if __name__ == "__main__":

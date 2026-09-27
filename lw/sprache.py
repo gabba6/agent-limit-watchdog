@@ -615,7 +615,7 @@ TEXTE = {
                             "en": "DRY-RUN: would send via codex queue to {id}: {text}"},
     "log_codex_queue_fehler": {"de": "codex queue an {id} fehlgeschlagen: {fehler}",
                                "en": "codex queue to {id} failed: {fehler}"},
-    # ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+    # ---- v1.4: Füllstand (offizielle Nutzungsanzeige) ----
     "nz_log_fehler": {"de": "Offizielle Nutzungsanzeige {n} nicht verfügbar ({fehler}) – Rückfall auf Orca/Statusline",
                       "en": "Official usage for {n} not available ({fehler}) - falling back to Orca/status line"},
     "nz_log_ok": {"de": "Offizielle Nutzungsanzeige {n} wieder verfügbar",
@@ -676,9 +676,7 @@ TEXTE = {
     "nz_kf_abfall": {"de": "daten.frueh_reset_abfall muss zwischen 5 und 100 liegen",
                      "en": "daten.frueh_reset_abfall must be between 5 and 100"},
 
-    # ======== v1.4 A Ende ========
-
-    # ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+    # ---- v1.4: Fortsetzen mit Belegen ----
     "fs_aktion_nachpruefen": {"de": "LÄUFT OFFENBAR {s} ({grund}) – wird nachgeprüft",
                               "en": "APPARENTLY RUNNING {s} ({grund}) – will be re-checked"},
     "fs_aktion_zurueck": {"de": "NACHPRÜFUNG {s}: keine Aktivität seit dem Reset – zurück ins Warten, neuer Versuch",
@@ -703,9 +701,7 @@ TEXTE = {
     "fs_lage_blockiert": {"de": "blockiert", "en": "blocked"},
     "fs_lage_beendet": {"de": "beendet", "en": "ended"},
 
-    # ======== v1.4 B Ende ========
-
-    # ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+    # ---- v1.4: Wach-Modus ----
     "wm_dialog_text": {"de": "Mac-Passwort, um die Bildschirmsperre umzuschalten (Wach-Modus):",
                        "en": "Mac password to switch the screen lock (awake mode):"},
     "wm_abbrechen": {"de": "Abbrechen", "en": "Cancel"},
@@ -773,9 +769,7 @@ TEXTE = {
     "wm_kf_sperre": {"de": "wach.sperre_standard muss eine ganze Zahl von 0 bis 86400 sein",
                      "en": "wach.sperre_standard must be a whole number from 0 to 86400"},
 
-    # ======== v1.4 C Ende ========
-
-    # ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
+    # ---- v1.4: App ----
     "app_uebersicht": {"de": "Übersicht", "en": "Overview"},
     "app_g_wartet": {"de": "{anzahl} Sitzung(en) warten", "en": "{anzahl} session(s) waiting"},
     "app_nacht_kachel": {"de": "Nacht", "en": "Night"},
@@ -825,5 +819,4 @@ TEXTE = {
     "app_amph_ungeprueft": {"de": "noch nicht geprüft", "en": "not checked yet"},
     "app_ja": {"de": "ja", "en": "yes"},
     "app_nein": {"de": "nein", "en": "no"},
-    # ======== v1.4 D Ende ========
 }

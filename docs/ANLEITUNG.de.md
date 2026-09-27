@@ -1,6 +1,6 @@
 # Bedienungsanleitung (Deutsch)
 
-Stand: Version 1.3 (Orca optional). Die englische Beschreibung steht in der [README](../README.md).
+Stand: Version 1.4 (offizielle Füllstände, verlässliches Fortsetzen, Wach-Modus, neue App). Die englische Beschreibung steht in der [README](../README.md).
 
 ## Ganz einfach erklärt (hier anfangen)
 
@@ -19,7 +19,7 @@ Er schaut jede Minute, wie voll dein Limit ist (5-Stunden-Fenster und Woche):
 | unter 80 % | nichts |
 | **80 %** | **Warnung**: Push aufs Handy und Banner am Mac, sonst nichts |
 | **92 %** | **Geordneter Stopp**: Jede Sitzung macht ihren Schritt fertig, sichert den Stand (Übergabedatei, WIP-Commit ohne Push) und hält an. Neue Subagents/Workflows werden verweigert. |
-| **Limit** | Die Sitzungen stehen schon, der Wächter wartet auf den Reset. |
+| **Limit** | Die Sitzungen stehen schon, der Wächter wartet auf den Reset und hält den Mac wach. |
 | **Reset** | Jetzt entscheidet der Nachtmodus, ob es von selbst weitergeht (siehe unten). |
 
 Warnung und Stopp laufen **immer, für alle Sitzungen**. Das musst du nie einschalten.
@@ -45,7 +45,8 @@ Der Nachtmodus beantwortet nur eine Frage: **Geht es nach dem Reset automatisch 
     einer Sitzung (nur diese),
   - in der Claude-Sitzung `#nacht` tippen (geht auch per Remote Control, kostet keine Nutzung),
   - oder `./waechter.py nacht an`.
-  Den Mac am Netzteil lassen. Würde er nachts einschlafen, warnt dich der Wächter.
+  Den Mac am Netzteil lassen. Solange der Nachtmodus läuft, hält der Wächter den Mac von selbst wach (mit
+  Amphetamine auch zugeklappt). Würde er trotzdem einschlafen, warnt dich der Wächter.
 - **Morgens:** nichts ausschalten, das passiert um 8 Uhr allein. Kurz den Bericht ansehen.
 - **Wenn er dich gerade stört:** Pause (in der App oder `./waechter.py pause 2h`). Dann greift er nirgends ein.
 
@@ -77,6 +78,43 @@ genauso, und du bekommst auch die Warnung. `./waechter.py status` und die App ze
 was der Wächter dort kann (z. B. „Terminal · warnt · stoppt · nur Push“).
 
 **Faustregel:** Was nachts oder unbeaufsichtigt sicher weiterlaufen soll, startest du in **Orca**.
+
+### Warum setzt er in Claude Desktop und der Codex-App nicht selbst fort?
+
+Kurz: Weil es dort keinen sicheren Weg gibt, „weiter“ zu schreiben.
+
+- **Kein offizieller Weg hinein.** Der Wächter tippt nur dort, wo er vorher den Bildschirm lesen kann (Orca). Die
+  Desktop-Apps haben keine Schnittstelle, um eine Nachricht in ein laufendes Gespräch zu schicken. Es ginge nur
+  mit simulierten Klicks oder Tastendrücken, und die könnten im Limit-Dialog genauso gut einen **Kauf-Knopf**
+  treffen. Genau das macht der Wächter nie.
+- **Claude kann es schon selbst.** In Claude Code (auch in der Desktop-App, soweit dort die Hooks laufen) gibt es
+  Claudes eingebautes Weitermachen am Limit. Mit Nachtmodus lässt der Wächter es laufen, ohne Nachtmodus sperrt er
+  es. Die Desktop-App macht also am harten Limit offiziell von selbst weiter.
+- **Die Codex-App hat nichts Vergleichbares.** Sie hat eigene Technik ohne Hooks und ohne `codex queue`. Der
+  Wächter kann dort nur anzeigen und warnen. Lange Codex-Aufgaben deshalb in einem Orca-Terminal starten.
+
+### Woher kommen die Prozentwerte? (seit 1.4: die offiziellen)
+
+Früher kamen die Werte von Orca. Die hängen manchmal hinterher oder springen (z. B. 99 % → 91 % → 100 % in wenigen
+Minuten). Seit 1.4 fragt der Wächter zuerst **dieselbe Stelle ab, die auch Claude Desktop bzw. ChatGPT für ihre
+Nutzungsanzeige benutzen**. Dann stimmen die Werte mit dem überein, was du dort siehst.
+
+Ehrlich gesagt: Diese Abfrage ist **nicht offiziell dokumentiert**. Sie liest nur deinen Verbrauch (kein
+Modellaufruf, kostet nichts, zählt nicht aufs Limit), nutzt dafür aber deine vorhandene Anmeldung:
+
+- Claude: das Anmelde-Token von Claude Code aus dem macOS-Schlüsselbund; Codex: das Token aus `~/.codex/auth.json`.
+- Das Token wird nur kurz gelesen, nur an genau diese zwei Adressen geschickt und **nie gespeichert, geloggt oder
+  erneuert**.
+- Abgefragt wird alle 3 Minuten, bei Warnung/Stopp/Limit jede Minute. Klappt es nicht (abgelaufene Anmeldung,
+  „zu viele Abrufe“, kein Netz), nimmt der Wächter still die alten Quellen (Orca, Statusline, Codex-Protokoll).
+- Abschalten: in `config.local.toml` unter `[daten]` `offiziell = false`.
+
+`./waechter.py status` und die App zeigen je Anbieter, woher der Wert kommt und wie alt er ist (z. B. „Claude-Quelle:
+offiziell (vor 40 s)“). Steht dort „Anmeldung abgelaufen“: einmal Claude Code öffnen, dann stimmt es wieder. Das
+Claude-Token läuft nach ein paar Stunden ohne Claude-Code-Sitzung ab, und der Wächter erneuert es bewusst nicht.
+
+**Frühes Reset:** Setzt Anthropic oder OpenAI ein Fenster vorzeitig zurück (kommt vor), sieht der Wächter das an
+den offiziellen Werten und setzt wartende Sitzungen sofort fort, statt bis zur alten Reset-Zeit zu warten.
 
 ### Woher kommt der Füllstand ohne Orca? (Statusline-Kette)
 
@@ -114,6 +152,7 @@ Tipp: Mit `alias lw="~/pfad/zu/agent-limit-watchdog/waechter.py"` in der `~/.zsh
 | `./waechter.py nacht an` | Nachtmodus für alle Sitzungen bis 08:00 (siehe unten) |
 | `./waechter.py nacht an <ID-Anfang oder Projektordner>` | Nachtmodus nur für diese Sitzung |
 | `./waechter.py nacht aus` / `./waechter.py nacht` | Nachtmodus aus / anzeigen, was gerade gilt |
+| `./waechter.py wach an` / `wach aus` / `wach` | Wach-Modus: Mac bleibt wach, Bildschirmsperre aus (fragt nach dem Passwort; siehe unten) |
 | `./waechter.py pause` | **Wächter aus** bis auf Weiteres: keine Stopps, keine Fortsetzungen, keine Pushes |
 | `./waechter.py pause 2h` | Pause für 2 Stunden (auch `30m`, `1d`), danach automatisch wieder an |
 | `./waechter.py pause aus` | **Wächter wieder an** (gleich: `./waechter.py weiter`) |
@@ -148,6 +187,49 @@ gesperrt –, und du bekommst je Anbieter einen Push „… Sitzung(en) warten a
 - **Altes Verhalten** (alles automatisch fortsetzen): in `config.local.toml` unter `[fortsetzen]`
   `nur_mit_nachtmodus = false`.
 
+## Verlässlich fortsetzen (seit 1.4)
+
+Früher hat der Wächter Orca geglaubt, wenn Orca „arbeitet“ meldete. Das ging einmal schief: Eine Sitzung war längst
+fertig, hatte aber noch einen Hintergrund-Task laufen. Orca sagte „arbeitet“, der Wächter setzte nicht fort, und die
+Sitzung stand fünf Stunden herum, obwohl das Limit längst zurückgesetzt war.
+
+Jetzt gilt: **Orcas „arbeitet“ allein reicht nicht.** Der Wächter braucht einen Beleg:
+
+- auf dem Bildschirm echte Arbeit (Spinner, „esc to interrupt“). Eine bereite Eingabezeile mit einer Fußzeile
+  für Hintergrund-Tasks zählt als **bereit**, nicht als „arbeitet“;
+- oder im Protokoll der Sitzung (Claude-Transcript bzw. Codex-Protokoll) neue Einträge nach dem Reset, und der
+  letzte Turn ist noch nicht beendet.
+
+Hat er eine Sitzung als „läuft bereits“ übersprungen, **prüft er ein paar Minuten später nach**. Ist seit dem Reset
+nichts passiert, kommt sie zurück in die Warteschlange und er versucht es erneut (höchstens 2 Fortsetzungen je
+Fenster wie bisher; nach 3 erfolglosen Nachprüfungen: blockiert und Push). Ausschalten ginge mit
+`[fortsetzen] belege_pruefen = false`, ist aber nicht zu empfehlen.
+
+## Wach-Modus (seit 1.4)
+
+Damit eine Fortsetzung um 7:30 Uhr klappt, darf der Mac nicht schlafen und am besten nicht gesperrt sein. Der
+Wach-Modus ersetzt eigene „wach bleiben“-Skripte und hat zwei Teile:
+
+- **Automatisch, ohne Passwort:** Solange eine Fortsetzung ansteht oder der Nachtmodus läuft, hält der Wächter den
+  Mac wach. Ist [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) installiert (kostenlos), startet er
+  eine **eigene, befristete** Amphetamine-Sitzung, die den Mac **auch zugeklappt** wach hält. Sonst nutzt er
+  `caffeinate` (wirkt nur am Netzteil). Er beendet nur Sitzungen, die er selbst gestartet hat. Beim ersten Mal fragt
+  macOS, ob der Wächter Amphetamine steuern darf (Systemeinstellungen › Datenschutz & Sicherheit › Automation).
+- **Von Hand:** `./waechter.py wach an`. Es kommt ein Passwort-Fenster von macOS, danach ist die
+  **Bildschirmsperre aus** und Amphetamine hält den Mac unbegrenzt wach (auch zugeklappt, kein Bildschirmschoner).
+  `./waechter.py wach aus` beendet das und stellt die vorherige Sperrzeit wieder her. `./waechter.py wach` zeigt
+  den Zustand. Englisch: `awake on|off|status`. Geht auch über die Kachel **Wach** in der App.
+
+Das Passwort wird nur im Fenster abgefragt und **nie gespeichert oder geloggt**. (Technisch geht es kurz als
+Argument an `sysadminctl`, weil das außerhalb eines Terminals der einzige Weg ist; es ist dann für einen Moment in
+der Prozessliste deines eigenen Macs sichtbar.) Hattest du vorher ein eigenes Skript mit einer gesicherten Sperrzeit
+(Datei `.vorherige-sperre`), übernimmt der Wächter diesen Wert einmal, wenn `[wach] remote_modus_befehl` auf das
+Skript zeigt oder `[wach] remote_alt_zustand` auf die Datei. Das alte Skript brauchst du danach nicht mehr.
+
+Ohne Amphetamine klappt alles außer „zugeklappt wach“: Die Sperre geht aus, am Netzteil hält `caffeinate` den Mac
+wach, zugeklappt schläft er. `./uninstall.sh` beendet die eigene Amphetamine-Sitzung und warnt, falls der
+Wach-Modus noch an ist (dann zuerst `wach aus`).
+
 ## Schwellen und Verhalten einstellen
 
 Eigene Werte gehören in die Datei **`config.local.toml`** im Ordner des Wächters. Sie wird nie hochgeladen und
@@ -174,6 +256,13 @@ codex_queue = false        # experimentell, ungetestet: Codex im normalen Termin
 puffer_minuten = 2         # so lange nach dem Reset warten
 max_pro_fenster = 2        # höchstens so viele automatische Fortsetzungen je Sitzung und Fenster
 
+[daten]
+offiziell = true           # offizielle Füllstände abfragen (siehe oben); false = nur Orca/Statusline/Codex-Protokoll
+
+[wach]
+amphetamine = true         # Amphetamine nutzen, falls installiert
+bei_nachtmodus = true      # Mac wach halten, solange der Nachtmodus läuft
+
 [bericht]
 uhrzeit = "08:00"          # Morgenbericht; hier endet auch der Nachtmodus
 ```
@@ -187,7 +276,7 @@ samt Kommentaren bleibt stehen. Bei einem Fehler ändert er nichts.
 Änderungen wirken beim nächsten Durchlauf (höchstens eine Minute). Mit `./waechter.py status` siehst du die
 aktiven Schwellen. Ist die Datei fehlerhaft, nimmt der Wächter die Standardwerte und schreibt das ins Log.
 
-## Menüleisten-App (seit 1.2)
+## Menüleisten-App (seit 1.2, neu gestaltet in 1.4)
 
 Eine kleine App in der Menüleiste zeigt dasselbe wie `status` auf einen Blick. Sie ist freiwillig; der Wächter
 läuft auch ohne sie. Die App ruft nur `waechter.py` auf, sie tippt nie in Terminals und bedient nie Limit- oder
@@ -199,12 +288,19 @@ Kaufmenüs.
   wandert vorher in die Backups) und richtet einen Autostart ein. Die App startet dann bei jeder Anmeldung und nach
   einem Absturz neu.
 - **Anzeige:** Das Ring-Symbol in der Menüleiste färbt sich ab der Warnphase, zeigt einen Mond im Nachtmodus,
-  Pausenstriche in der Pause und einen gestrichelten Ring, wenn der Wächter nicht läuft. Ein Klick öffnet je Anbieter
-  eine Karte mit 5-Stunden- und Wochenverbrauch, Phase, Reset-Zeit und Countdown, dazu die aktuellen Sitzungen mit
-  Zustand und Projektordner und den letzten Durchlauf.
-- **Bedienen:** Pause für 30 Minuten, 2 Stunden oder bis auf Weiteres und wieder aufheben; Nachtmodus für alle oder
-  per Mond-Schalter je Sitzung; die fünf Schwellen ändern und speichern (landet in `config.local.toml`); Bericht
-  ansehen; Log öffnen; Beenden.
+  Pausenstriche in der Pause und einen gestrichelten Ring, wenn der Wächter nicht läuft. Ein Klick öffnet das
+  Fenster, von oben nach unten:
+  1. **Ein Satz zum Gesamtzustand**, z. B. „Alles gut“, „Stopp – Reset 17:50“ oder „2 Sitzung(en) warten“.
+  2. **Je eine Karte für Claude und Codex:** 5-Stunden-Wert groß, Woche darunter, Balken mit Markierungen für
+     Warnung und Stopp, Reset-Uhrzeit und woher der Wert kommt (z. B. „offiziell · vor 1 min“).
+  3. **Sitzungen kompakt:** Projekt, Ort und ein farbiger Zustand („arbeitet“, „wartet bis 07:32“, „„weiter“
+     nötig“, „blockiert“ …); der Mond schaltet den Nachtmodus je Sitzung.
+  4. **Schnellschalter:** **Nacht** (alle Sitzungen), **Wach** (Wach-Modus, das Passwort-Fenster kommt von macOS)
+     und **Pause**.
+  5. **Einstellungen** (eingeklappt): Schwellen, Hinweise, Bericht, Log.
+- **Bedienen:** Pause für 30 Minuten, 2 Stunden oder bis du fortsetzt; Nachtmodus für alle oder je Sitzung;
+  Wach-Modus an/aus; die fünf Schwellen ändern und speichern (landet in `config.local.toml`); Bericht ansehen; Log
+  öffnen; Beenden.
 - **Sprache:** Die App übernimmt `sprache` aus der Konfiguration.
 - **Rückbau:** `./uninstall.sh` entlädt auch den Autostart der App und verschiebt App und Autostart-Datei nach
   `~/.limit-waechter/backups/`. Gelöscht wird nichts.
@@ -217,7 +313,7 @@ Kaufmenüs.
 | OK | unter 80 % | nichts |
 | Warnung | ab 80 % | Push und Banner |
 | Stopp | ab 92 % | Claude: keine neuen Subagents/Workflows; am Ende des Turns genau ein Sicherungsauftrag (Status-/Übergabedatei, WIP-Commit ohne Push, laufende Workflows mit Run-ID notieren), dann hält die Sitzung an. Codex bekommt eine kurze Nachricht mit derselben Bitte. |
-| Limit | 100 % | Sitzungen werden mit Reset-Zeit gemerkt, der Mac bleibt wach |
+| Limit | 100 % | Sitzungen werden mit Reset-Zeit gemerkt, der Mac bleibt wach (Wach-Modus automatisch) |
 | Reset | Reset + 2 min | Sitzungen im Nachtmodus: Wächter liest den Bildschirm und setzt fort, außer dort steht ein Menü, eine Kaufoption oder etwas Unklares. Alle anderen warten auf „weiter“ (ein Push). |
 
 Von Hand fortsetzen: in der Sitzung einfach „weiter“ schreiben. Claude liest dann die eigene Sicherung.
@@ -231,7 +327,12 @@ Von Hand fortsetzen: in der Sitzung einfach „weiter“ schreiben. Claude liest
   dort „weiter“, wenn du weitermachen willst.
 - **„Wochenreserve erreicht“:** Ab jetzt keine automatische Fortsetzung mehr bis zum Wochen-Reset.
 - **„Mac: … Remote-Modus aus“ (nachts):** Der Mac würde zugeklappt schlafen oder hängt am Akku. Dann klappt die
-  Fortsetzung nicht.
+  Fortsetzung nicht. Abhilfe: Netzteil anschließen und `./waechter.py wach an` (steht auch im Push).
+- **„Limit wurde vorzeitig zurückgesetzt“:** Der Anbieter hat früher zurückgesetzt; wartende Sitzungen im
+  Nachtmodus laufen jetzt weiter.
+- **„offizielle Werte nicht verfügbar, Anmeldung abgelaufen“:** Einmal Claude Code (bzw. Codex) öffnen. Bis dahin
+  nimmt der Wächter die Orca-Werte, die hinterherhängen können.
+- **„Der Limit-Wächter darf Amphetamine nicht steuern“:** In den Systemeinstellungen unter Automation erlauben.
 - **„Guthaben gesunken“ / „Extra-Usage aktiv“:** Bitte prüfen, der Wächter selbst gibt nie Geld aus.
 
 ## Für welche Apps gilt das?
@@ -242,7 +343,9 @@ bestätigt), die Codex-App nur mit Anzeige und Warnung. Der Verbrauch aller Apps
 
 ## Wenn etwas komisch ist
 
-1. `./waechter.py status`: Läuft der LaunchAgent, und wann war der letzte Tick?
+1. `./waechter.py status`: Läuft der LaunchAgent, und wann war der letzte Tick? Woher kommen die Werte
+   (offiziell, Orca, Statusline)? Weichen sie von Claude Desktop ab, steht unter „offizielle Anzeige“ meist der
+   Grund.
 2. Log ansehen: `tail -50 ~/.limit-waechter/log/waechter.log`. Dort steht auch jeder Bildschirm, den der Wächter vor
    dem Senden gelesen hat.
 3. Sofort alles anhalten: `./waechter.py pause`.

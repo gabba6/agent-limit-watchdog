@@ -348,7 +348,7 @@ def lokal_setzen(abschnitt, werte, datei=None):
     return datei
 
 
-# ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+# ---- v1.4: Füllstand (offizielle Nutzungsanzeige) ----
 def _pruefen_daten(k):
     """v1.4 A: Abrufintervalle der offiziellen Nutzungsanzeige."""
     d = k.get("daten") or {}
@@ -381,9 +381,8 @@ def _pruefen_daten(k):
 
 PRUEF_ZUSATZ.append(_pruefen_daten)
 
-# ======== v1.4 A Ende ========
 
-# ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+# ---- v1.4: Fortsetzen mit Belegen ----
 def _pruefen_b(k):
     f = k["fortsetzen"]
     fehler = []
@@ -398,9 +397,8 @@ def _pruefen_b(k):
 
 PRUEF_ZUSATZ.append(_pruefen_b)
 
-# ======== v1.4 B Ende ========
 
-# ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+# ---- v1.4: Wach-Modus ----
 def _pruefen_wach(k):
     w = k.get("wach", {})
     wert = w.get("sperre_standard")
@@ -410,9 +408,3 @@ def _pruefen_wach(k):
 
 
 PRUEF_ZUSATZ.append(_pruefen_wach)
-
-# ======== v1.4 C Ende ========
-
-# ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
-
-# ======== v1.4 D Ende ========

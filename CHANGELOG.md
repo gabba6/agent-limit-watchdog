@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.4.0 – 2026-09-27
+
+Correct usage, reliable continuation, awake mode, redesigned app.
+
+- **Official usage numbers.** The tick now reads the same usage display Claude Desktop / claude.ai and ChatGPT
+  use (`api.anthropic.com/api/oauth/usage`, `chatgpt.com/backend-api/wham/usage`; read-only, no model call). These
+  endpoints are **undocumented**; they use your existing Claude Code / Codex login, which is read at runtime and
+  never logged, stored or renewed, and only sent via https to exactly these hosts. Throttled (3 min, 1 min around
+  warning/stop/limit or a due continuation), backoff on 429, silent fallback to Orca / status line / Codex log on
+  any error. Official data younger than 10 min wins; an older value never overwrites a fresher one. Switch off
+  with `[daten] offiziell = false`. New `lw/nutzung.py`, cache `state/offiziell.json` (no token).
+- **Early resets.** If a provider resets a window early (big drop or `resets_at` moved forward, from a trusted
+  source only), waiting sessions are due at once, with one push.
+- **Reliable continuation.** Orca's “working” is no longer trusted alone (a finished session with a background
+  task looked busy and was never continued). It needs evidence from the screen or from the Claude transcript /
+  Codex rollout (new `lw/aktivitaet.py`); a Claude input line with a background-task footer counts as ready. A
+  “running already” without new activity since the reset is re-checked after `pruefen_nach_minuten` and goes back
+  to the queue (`[fortsetzen] belege_pruefen`, `aktiv_frist_minuten`, `max_nachpruefungen`). New screen fixtures.
+- **Awake mode** (`waechter.py awake on|off|status`, German `wach an|aus|status`; new `lw/wach.py`): password dialog,
+  screen lock off and an unlimited Amphetamine session with closed display mode; `off` restores the previous lock
+  delay. The password is never stored or logged. It replaces separate keep-awake scripts; an old saved lock delay
+  is taken over once. Automatically and without a password, the tick keeps the Mac awake while a continuation is
+  pending or night mode is on – with its own time-limited Amphetamine session if installed (awake with the lid
+  closed), otherwise `caffeinate` – and ends only sessions it started. Without Amphetamine it degrades cleanly.
+  The night warning now suggests `awake on`. `uninstall.sh` ends the own Amphetamine session and warns if awake
+  mode is still on. New `[wach]` options `amphetamine`, `amphetamine_zugeklappt`, `bei_nachtmodus`,
+  `sperre_standard`, `remote_alt_zustand`.
+- **Redesigned menu bar app:** overall state in one sentence, a card per provider (5 h large, week, threshold marks,
+  reset, data source and age), compact sessions with coloured state chips, quick switches for night mode, awake
+  mode and pause, settings collapsed. `--vorschau --demo <file> --bild <png>` renders screenshots from demo data.
+- `status` shows the data source per provider, official-usage errors and the awake state. `status --json` has
+  new keys `gesamt`, `offiziell`, `wach`, per provider `quelle_text` / `woche_modell` and per session `lage`,
+  `lage_text`, `lage_farbe`, `aktivitaet`; existing keys are unchanged.
+- Docs: why Claude Desktop and the Codex app are not continued automatically (no official way in; Claude's
+  built-in auto-continue covers Claude Desktop).
+
 ## 1.3.0 – 2026-09-26
 
 Without Orca. Orca is now optional.

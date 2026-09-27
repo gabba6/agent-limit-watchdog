@@ -14,14 +14,19 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 | Status line chain | `hooks/statusline.py` | Claude Code, as `statusLine` command | store Claude's `rate_limits` in `state/statusline.json` (throttled, atomic), then run the original status line unchanged |
 | Locations | `lw/orte.py` | tick, hook, CLI | location of a session (`orca` / `terminal` / `desktop`) and what the watchdog can do there (`faehigkeiten`, computed, never stored) |
 | Night mode | `lw/nacht.py` | tick, hook, CLI | who is continued after the reset: `nacht_bis` per session, `state/nacht.json` for all; ends at the report time |
-| State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks, plus `nur_nacht` / `nacht_ende`), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `log/`, `berichte/` (reports), `backups/` |
-| CLI | `lw/cli.py` | you, the app | `status`, `night`, `pause`, `thresholds`, `report`, `simulate`, `ntfy-setup`, … |
-| Menu bar app | `app/` (SwiftUI) | own LaunchAgent, at login | shows usage, phases, sessions; pause, night mode, thresholds, report – only via `waechter.py` |
+| Official usage (1.4) | `lw/nutzung.py` | tick (throttled) | read-only request to the providers' usage display, cached without token in `state/offiziell.json` |
+| Activity evidence (1.4) | `lw/aktivitaet.py` | tick | did a session really work since a given time? (Claude transcript / Codex rollout, never Orca's state) |
+| Awake mode (1.4) | `lw/wach.py` | tick, CLI, `uninstall.sh` | automatic keep-awake (Amphetamine session or `caffeinate`), manual `wach an\|aus` with screen lock |
+| State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks, plus `nur_nacht` / `nacht_ende`), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `state/offiziell.json` (official usage cache, no token), `state/wach.json` (own `caffeinate` / Amphetamine session), `state/wach-modus.json` (manual awake mode and the previous lock delay, never a password), `log/`, `berichte/` (reports), `backups/` |
+| CLI | `lw/cli.py` | you, the app | `status`, `night`, `awake`, `pause`, `thresholds`, `report`, `simulate`, `ntfy-setup`, … |
+| Menu bar app | `app/` (SwiftUI) | own LaunchAgent, at login | shows usage, phases, sessions; pause, night mode, awake mode, thresholds, report – only via `waechter.py` |
 
 ## Data sources (all read-only)
 
 | Source | Gives | Notes |
 |---|---|---|
+| `GET https://api.anthropic.com/api/oauth/usage` (1.4) | Claude `five_hour` / `seven_day` `utilization`, `resets_at`, per-model weekly limits | undocumented endpoint behind Claude's usage display; `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`; token from the keychain item `Claude Code-credentials` (`claudeAiOauth.accessToken`, `expiresAt` checked first) |
+| `GET https://chatgpt.com/backend-api/wham/usage` (1.4) | Codex `rate_limit.primary_window` / `secondary_window` (`used_percent`, `reset_at`) | undocumented endpoint behind ChatGPT's usage display; `Authorization: Bearer` + `ChatGPT-Account-Id` from `~/.codex/auth.json` |
 | `orca account list --json` → `result.rateLimits.claude/codex` | 5-hour and weekly `usedPercent`, `resetsAt` | optional (only if Orca is installed); undocumented Orca field, read tolerantly |
 | `state/statusline.json` (written by `hooks/statusline.py`) | Claude 5-hour and weekly `used_percentage`, `resets_at` | from Claude's own status line input; for Claude the **fresher** of Orca and status line wins (tie: Orca); `phasen.claude.quelle` says which |
 | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex `rate_limits` snapshots, `task_complete` with `usage_limit_exceeded`, `session_meta.originator` | fresher than Orca for Codex; the reset time is matched against the “try again at …” message; outside Orca also the source of Codex sessions |
@@ -31,7 +36,31 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 | Orca's `agent-hooks/last-status.json` | pane → provider session id | maps Codex terminals to their thread |
 | `pmset`, `ioreg` | power source, sleep settings, lid behaviour | for the night warning |
 
-The watchdog never calls usage APIs itself and never reads tokens or credentials.
+### Official usage (1.4)
+
+`lw/nutzung.py` reads the two usage endpoints above. Rules:
+
+- **Token handling:** read fresh for every request (keychain via `security find-generic-password -w`, or
+  `auth.json`), kept only in a local variable, sent only via https to exactly `api.anthropic.com` /
+  `chatgpt.com` (other hosts in the config are refused), never logged, cached, stored or renewed. An expired
+  Claude token (`expiresAt`) is not even sent (`abgelaufen`).
+- **Throttling:** every `offiziell_intervall_minuten` (3); every `offiziell_intervall_eng_minuten` (1) while a
+  provider is in warning/stop/limit or a continuation is due within 15 minutes. HTTP 429 → backoff 5 → 60 min
+  (`Retry-After` respected); 401/403 → 15 min pause; network or format errors → next interval.
+- **Cache:** `state/offiziell.json` per provider: last success (`stand`), next attempt, error code
+  (`auth`, `rate`, `netz`, `format`, `kein_token`, `abgelaufen`, `url`), parsed windows. No token, no headers.
+- **Selection:** official data younger than `offiziell_max_alter_minuten` (10) wins; otherwise the freshest of
+  official, Orca, status line (Claude) and rollout (Codex). An older value never overwrites a fresher one.
+  `phasen.<provider>.quelle` is `offiziell` | `orca` | `statusline` | `rollout`.
+- **Early reset:** if the 5-hour or weekly value of a trusted source (official, or status line/rollout at most
+  5 minutes old – never Orca alone) drops by at least `frueh_reset_abfall` points (20) before the known reset, or
+  `resets_at` moves forward, waiting sessions of that provider get `fortsetzen_ab` pulled forward (due now, or at
+  the new reset time), and one push says so.
+- **Fallback:** with `[daten] offiziell = false`, in tests/CI (`LIMIT_WAECHTER_OFFLINE=1`) or on any error the
+  1.3 sources are used unchanged. If the login has expired while a session waits for a reset, one push per outage
+  says so (“open Claude Code once”); other errors only show up in `status` and the app.
+
+Apart from these two read-only requests the watchdog never calls provider APIs and never writes credentials.
 
 ## Phases
 
@@ -88,12 +117,22 @@ get 5 more minutes so Claude's built-in auto-continue can go first):
 
 1. weekly reserve reached at stop time or now → *reserve*, notify, done
 2. already two automatic attempts in this window → *gave up*, notify
-3. terminal found (by handle, then by pane) and working → nothing to do
+3. terminal found (by handle, then by pane) and working → nothing to do. **Since 1.4 Orca's `working` alone is not
+   believed** (27.09.2026: a session whose turn had long ended kept a background task running, Orca said
+   `working`, and the watchdog waited five hours). With `[fortsetzen] belege_pruefen` (default) “working” needs
+   evidence: the screen shows real work (spinner, “esc to interrupt”; a Claude input line ready with a
+   background-task footer counts as *ready*), or `lw/aktivitaet.py` finds new `assistant`/`user` entries after the
+   halt/reset in the transcript (Claude, sidechains ignored) or rollout (Codex) and the last entry is not a
+   finished turn (`stop_hook_summary`, `turn_duration`, `task_complete`). Without evidence the screen decides as
+   in step 4.
 4. read the screen (`lw/bildschirm.py`): menu, countdown, workflow view, purchase hint, text in the input line,
    unknown → **send nothing**, notify; “press enter to continue” → Enter only; empty prompt → continuation prompt
 5. terminal gone → only if `claude agents --json` does not show the session running elsewhere: new Orca terminal
    with `claude --resume <id> --permission-mode auto "<prompt>"` / `codex resume <id> --sandbox workspace-write "<prompt>"`
-6. a few minutes later: check whether the continued session is stuck at a prompt → notify
+6. a few minutes later (`pruefen_nach_minuten`): check whether the continued session is stuck at a prompt →
+   notify. A session marked “running already” / continued is re-checked too: no new activity since the reset →
+   back into the queue and try again (still counted against `max_pro_fenster`; after `max_nachpruefungen`
+   re-checks → blocked + notification).
 
 **Outside Orca** (location `terminal`/`desktop`) the watchdog never types, never reads a screen, never opens a
 terminal or window (no tmux, no AppleScript). Claude: only Claude's built-in auto-continue (allowed with night
@@ -101,9 +140,30 @@ mode, blocked without); a due session that is still waiting after its grace peri
 gets a push with a command to copy (`claude --resume <id>`), never a restart. Codex: push with `codex resume <id>`,
 unless `codex_queue` is on (below).
 
-At most two continuations per tick (staggered). While a continuation is pending within the next 12 hours the
-tick keeps `caffeinate -i -s` running (only for sessions that will actually be continued) until reset + 15 minutes and, at night, warns if the Mac would sleep with
-the lid closed or runs on battery.
+At most two continuations per tick (staggered).
+
+## Keeping the Mac awake (1.4)
+
+`lw/wach.py`, all system calls as argument lists with timeouts, never a shell.
+
+- **Automatic (tick, no password):** while a continuation is pending within the next 12 hours (only sessions that
+  will actually be continued) or night mode is on (`[wach] bei_nachtmodus`), until reset + 15 minutes / the end
+  of night mode: `caffeinate -i -s` as before, plus – if Amphetamine is installed and automation is allowed – an
+  **own, time-limited** Amphetamine session (`start new session with options {duration, interval,
+  displaySleepAllowed:true}`, then `enable closed display mode` and `prevent screen saver`, which only affect the
+  running session). Only sessions the watchdog started itself (recorded in `state/wach.json`) are ever ended. A
+  missing automation permission is detected once and pushed; it then degrades to `caffeinate`.
+- **Manual (`wach an|aus|status`, en `awake on|off|status`):** password dialog via `osascript` (hidden answer,
+  closes itself after 110 s), `sysadminctl -screenLock off` (previous value saved in `state/wach-modus.json`
+  first), unlimited Amphetamine session with closed display mode. `aus` ends it, allows the screen saver again and
+  restores the saved lock delay (`[wach] sperre_standard` if none). `sysadminctl -password -` only reads from a
+  TTY, so the password is passed as an argument (as the replaced script did): briefly visible in the local process
+  list, never logged, stored or put into an error message. An older script's state file (`.vorherige-sperre`
+  next to the script in `remote_modus_befehl`, or `[wach] remote_alt_zustand`) is read once and never changed.
+- At night the tick still warns if the Mac would sleep with the lid closed or runs on battery; the warning now
+  suggests `waechter.py awake on` unless `remote_modus_befehl` names an existing script.
+- `uninstall.sh` runs `python3 -m lw.wach rueckbau`: ends the own Amphetamine session and warns if manual awake
+  mode is still on (the screen lock stays off until `wach aus`).
 
 ## Codex
 
@@ -121,7 +181,7 @@ so the live test was not possible) a `terminal` session gets the stop message an
 continuation via `codex queue --thread <id> --message <text>` (argument list, no shell, 60 s timeout); progress is
 checked in the rollout file. The Codex app has its own app server, so it is display/warning only.
 
-## Menu bar app (1.2)
+## Menu bar app (1.2, redesigned in 1.4)
 
 ```
 LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waechter.py … ──▶ lw/cli.py ──▶ state, config.local.toml
@@ -131,7 +191,8 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
 
 - **No own logic:** the app never reads the state folder or writes config itself. Every action is a CLI call
   (`/usr/bin/python3 waechter.py …`, argument list, no shell, in the background, 20 s timeout):
-  `status --json`, `pause 30m|2h`, `pause`, `pause aus`, `nacht an|aus [<full id>]`,
+  `status --json`, `pause 30m|2h`, `pause`, `pause aus`, `nacht an|aus [<full id>]`, `wach an|aus --json`
+  (180 s timeout, the password dialog belongs to `waechter.py`),
   `schwellen setzen … --json`, `report`, `app-texte`. The German command names also work when the language is
   English and vice versa. Status is reloaded every 30 s, when the popover opens and after every command.
 - **Contract `status --json`:** besides the older keys it has `version`, `jetzt`, `sprache`, `pause_bis`,
@@ -140,6 +201,12 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
   Since 1.3 also `orca_vorhanden`, `nur_orca`, `statusline` {`zustand`: `aktiv`|`zurueckgeschrieben`|`aus`, `stand`}
   and per session `ort`, `ort_text`, `faehigkeiten` {`warnen`, `stoppen`, `fortsetzen`: `ja`|`nein`|`push`},
   `faehigkeiten_text` and `automatisch` (will the watchdog really continue it by itself?).
+  Since 1.4 also `gesamt` {`stufe`: `stoerung`|`pause`|`limit`|`stopp`|`warnung`|`wartet`|`ok`, `text`, `detail`}
+  (the one-sentence banner), `offiziell` {per provider `zustand`: `ok`|`aus`|`fehler`, `fehler`, `stand`},
+  `wach` {`an`, `art`: `amphetamine`|`caffeinate`|`aus`, `modus`: `manuell`|`automatisch`|`aus`, `bis`,
+  `sperre`, `zugeklappt_ok`, `netzteil`, `amphetamine`, `text`}, per provider `quelle_text` and `woche_modell`,
+  and per session `lage` / `lage_text` / `lage_farbe` (state chip) and `aktivitaet` {`letzte`, `quelle`}.
+  Older output without these keys still works (`tests/fixtures/app/status_v13.json`).
   Example: `tests/fixtures/app/status.json`. The app decodes every field as optional and drops broken entries.
 - **Texts:** the hidden command `app-texte` returns `{"sprache", "texte"}` with all keys starting with `app_`,
   `phase_`, `z_` from `lw/sprache.py`, placeholders unreplaced; the app fills `{name}` itself and formats
@@ -154,8 +221,12 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
 - **LaunchAgent** `<label>.app`: starts `~/Applications/Limit-Waechter.app/Contents/MacOS/LimitWaechter`,
   `RunAtLoad`, `KeepAlive {SuccessfulExit: false}`, `LimitLoadToSessionType Aqua`, `ProcessType Interactive`,
   logs to `log/app.out.log` / `app.err.log`. Installed only by `./install.sh app`, removed by `./uninstall.sh`.
+- **Layout (1.4):** status banner (`gesamt`) → usage cards (5 h large, week smaller, threshold marks, reset,
+  source and age) → sessions (state chips, sorted by what needs attention, night-mode moon) → quick switches
+  (Night, Awake, Pause) → collapsed settings/thresholds/notes. SF Symbols, light/dark.
 - **Self-test:** `LimitWaechter --selbsttest <status.json>` decodes a file with the app's models without GUI
   (exit 0/1); `--version` prints the version. CI builds the app and runs the self-test.
+  `LimitWaechter --vorschau --demo <status.json> [--hell|--dunkel] --bild shot.png` renders a screenshot from demo data.
 
 ## Design decisions
 
@@ -178,3 +249,13 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
   Orca treats a `statusLine` command containing that string as its own (“managed”) and overwrites it, while it
   leaves other (“user”) commands alone. That is also why the original lives in a file, not in the command. If
   the entry is replaced anyway, `status`/the app show it (`zurueckgeschrieben`) and usage falls back to Orca.
+- **Official numbers first, but never required (1.4):** the usage display endpoints are what the user sees in
+  Claude Desktop / ChatGPT, so they are the reference. They are undocumented, so every failure falls back
+  silently, the feature can be switched off, and the login is only ever read.
+- **Evidence over status flags (1.4):** an agent state reported by another tool is a hint, not proof. Continuing
+  is skipped only if the screen or the session's own log shows work; a skipped continuation is re-checked.
+- **Keep-awake without a password, lock changes only with one (1.4):** the tick may start and end its own
+  time-limited Amphetamine/caffeinate sessions; the screen lock is only touched by the user through the dialog.
+- **No automatic continuation in the desktop apps:** there is no official way to send a message into Claude
+  Desktop or the Codex app; simulated clicks could hit a purchase button. Claude Desktop keeps Claude's built-in
+  auto-continue (governed by night mode through the hooks); the Codex app is display/warning only.

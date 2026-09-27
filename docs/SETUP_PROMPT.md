@@ -33,6 +33,7 @@ Hard rules (never break them):
      Without Orca the watchdog still works in normal terminals (see README, "Where the watchdog can do what").
    - Claude Code is 2.1.234 or newer (`claude --version`) and ~/.claude/settings.json exists.
    - Codex CLI (optional): `codex --version`.
+   - Amphetamine (optional, free; keeps the Mac awake with the lid closed): /Applications/Amphetamine.app exists.
    - Only if Orca is installed, read-only data check: `/Applications/Orca.app/Contents/Resources/bin/orca account list --json` contains
      result.rateLimits.claude (and .codex if used). Show me only the percentages, nothing else from that output.
    If something is missing, stop and tell me what to install. Do not install it yourself without asking.
@@ -48,6 +49,12 @@ Hard rules (never break them):
    - Optional: my first name for the texts the hooks show to Claude.
    - Thresholds: keep the defaults (warn 80 %, orderly stop 92 %, weekly reserve 20 %) or change them.
    - Whether sessions should be continued automatically after the reset (`[fortsetzen] aktiv = true/false`), and whether only sessions in night mode are continued (`nur_mit_nachtmodus = true`, default; `false` = continue every session, as in 1.0).
+   - Whether to read the official usage numbers (`[daten] offiziell = true`, default). Explain honestly: it is an
+     undocumented, read-only usage endpoint (the one Claude Desktop / ChatGPT use for their usage display) that
+     uses my existing Claude Code / Codex login; the token is never stored, logged or renewed; `false` = Orca /
+     status line only. Do not call these endpoints yourself during setup.
+   - Whether the Mac should be kept awake automatically while night mode is on (`[wach] bei_nachtmodus = true`,
+     default). Mention `./waechter.py awake on|off` (asks for my password in a macOS dialog; do not run it for me).
    Write my answers into config.local.toml (create it if needed; it is ignored by git). Only put the values I
    want to change there, and validate with `./waechter.py status`.
 
