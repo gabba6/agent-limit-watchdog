@@ -471,12 +471,6 @@ TEXTE = {
     # ------------------------------------------------------------ v1.1 Nachtmodus: Hook und Agententexte (Umsetzer B)
     "nach_reset_weiter": {"de": " Nach dem Reset setzt {wer} mit „weiter“ fort.",
                           "en": " After the reset, {wer} will continue by typing \"continue\"."},
-    "weiter_block": {
-        "de": "{app}: Das Limit ist zurückgesetzt. Automatisches Fortsetzen ist für diese Sitzung aus (kein "
-              "Nachtmodus); {wer} setzt mit „weiter“ fort.",
-        "en": "{app}: The limit has reset. Automatic continuation is off for this session (no night mode); {wer} "
-              "will continue by typing \"continue\".",
-    },
     "nacht_an_hook": {
         "de": "{app}: Nachtmodus an bis {zeit} – nach einem Limit-Reset setze ich diese Sitzung automatisch fort. "
               "Aus: #nacht aus",
@@ -503,7 +497,7 @@ TEXTE = {
     # ------------------------------------------------------------ v1.2 Schwellen-Befehl
     "h_schwellen": {"de": "Schwellen anzeigen oder setzen (schwellen setzen warnung=80 …)",
                     "en": "show or set thresholds (thresholds set warn=80 …)"},
-    "sw_zeile": {"de": "{name:14} {wert}", "en": "{name:14} {wert}"},
+    "sw_zeile": {"de": "{name:16} {wert}", "en": "{name:16} {wert}"},
     "sw_gespeichert": {"de": "Schwellen gespeichert in {datei}.", "en": "Thresholds saved to {datei}."},
     "sw_aktion": {"de": "Unbekannte Aktion „{aktion}“ – erlaubt: setzen.", "en": "Unknown action \"{aktion}\" – allowed: set."},
     "sw_leer": {"de": "Keine Werte angegeben (z. B. warnung=80).", "en": "No values given (e.g. warn=80)."},
@@ -541,8 +535,10 @@ TEXTE = {
     "app_nacht_sitzung": {"de": "Nacht bis {zeit}", "en": "Night until {zeit}"},
     "app_nacht_geerbt": {"de": "Über Nacht (alle) bis {zeit} – für alle ausschalten über die Kachel „Nacht“",
                          "en": "Overnight (all) until {zeit} – turn it off for all with the “Night” tile"},
-    "app_nacht_hinweis": {"de": "Nach dem Reset laufen nur Sitzungen im Nachtmodus automatisch weiter.",
-                          "en": "After the reset, only sessions in night mode continue automatically."},
+    "app_nacht_hinweis": {"de": "Claude setzt nach dem Reset selbst fort. Im Nachtmodus springt der Wächter ein, "
+                                "wenn das nicht greift, setzt Codex fort und hält den Mac wach.",
+                          "en": "Claude continues by itself after the reset. In night mode the watchdog steps in when "
+                                "that fails, continues Codex and keeps the Mac awake."},
     "app_sitzungen": {"de": "Sitzungen", "en": "Sessions"},
     "app_keine_sitzungen": {"de": "Keine Sitzungen", "en": "No sessions"},
     "app_fortsetzung_ab": {"de": "Fortsetzung ab {zeit}", "en": "Continues at {zeit}"},
@@ -839,4 +835,67 @@ TEXTE = {
     "app_kontext_quelle_alter": {"de": "{quelle} · vor {dauer}", "en": "{quelle} · {dauer} ago"},
     "app_kontext_details": {"de": "Klicken für Details", "en": "Click for details"},
     "app_kontext_zuklappen": {"de": "Klicken zum Zuklappen", "en": "Click to collapse"},
+
+    # ---- v1.4 Nativ zuerst, sanfter Stopp, Kontext-Tracking, Terminal-Zeile
+    "kx_kf_stopp_art": {"de": "schwellen.claude_stopp_art muss \"sanft\" oder \"geordnet\" sein",
+                        "en": "schwellen.claude_stopp_art must be \"sanft\" (soft) or \"geordnet\" (orderly)"},
+    "kx_kf_reihenfolge": {"de": "kontext.warnung muss kleiner als kontext.kritisch sein",
+                          "en": "kontext.warnung must be lower than kontext.kritisch"},
+    "kx_kf_fenster": {"de": "kontext.standard_fenster muss eine ganze Zahl ab 1000 sein",
+                      "en": "kontext.standard_fenster must be a whole number of at least 1000"},
+    "kx_kf_ruht": {"de": "anzeige.ruht_stunden muss zwischen 0 und 168 liegen",
+                   "en": "anzeige.ruht_stunden must be between 0 and 168"},
+    "sanft_deny": {
+        "de": "{app}: Limit nah ({stand}) – keine neuen Subagents/Workflows starten, selbst weiterarbeiten; "
+              "laufende dürfen fertig werden.",
+        "en": "{app}: limit close ({stand}) - do not start new subagents/workflows, keep working yourself; "
+              "running ones may finish.",
+    },
+    "sanft_kontext": {
+        "de": "Hinweis {app}: Nutzungslimit nah ({stand}). Keine neuen Subagents oder Workflows starten, selbst "
+              "weiterarbeiten; laufende dürfen fertig werden. Am Limit übernimmt Claude selbst.",
+        "en": "Note from {app}: usage limit close ({stand}). Do not start new subagents or workflows, keep working "
+              "yourself; running ones may finish. At the limit Claude takes over by itself.",
+    },
+    "push_stopp_sanft": {
+        "de": "{n}: Stopp-Schwelle erreicht ({art} {pct}). Keine neuen Subagents/Workflows; laufende Arbeit geht "
+              "weiter, am Limit setzt Claude selbst fort. Reset {reset}.{hinweis}",
+        "en": "{n}: stop threshold reached ({art} {pct}). No new subagents/workflows; running work goes on, at the "
+              "limit Claude continues by itself. Resets {reset}.{hinweis}",
+    },
+    "kx_hinweis_sitzung": {
+        "de": "Hinweis {app}: Kontext bei {pct} ({tokens} / {fenster}) – Übergabe/Kompaktierung vorbereiten.",
+        "en": "Note from {app}: context at {pct} ({tokens} / {fenster}) - prepare a handoff or compaction.",
+    },
+    "kx_push_warnung": {
+        "de": "{n}: Kontext der Sitzung {id} bei {pct} ({tokens} / {fenster}) – Übergabe oder Kompaktierung "
+              "vorbereiten.",
+        "en": "{n}: context of session {id} at {pct} ({tokens} / {fenster}) - prepare a handoff or compaction.",
+    },
+    "kx_push_kritisch": {
+        "de": "{n}: Kontext der Sitzung {id} kritisch: {pct} ({tokens} / {fenster}) – jetzt übergeben oder "
+              "kompaktieren.",
+        "en": "{n}: context of session {id} critical: {pct} ({tokens} / {fenster}) - hand off or compact now.",
+    },
+    "sl_kontext": {"de": "ctx", "en": "ctx"},
+    "sl_woche": {"de": "Wo", "en": "wk"},
+    "st_nativ": {"de": " · Claude setzt nach Reset {zeit} selbst fort",
+                 "en": " · Claude continues by itself after reset {zeit}"},
+    "st_kontext": {"de": " · Kontext {pct}", "en": " · context {pct}"},
+    "st_kontext_schwellen": {"de": "Kontext: Warnung {w} %, kritisch {k} %",
+                             "en": "Context: warning {w}%, critical {k}%"},
+    "fs_lage_nativ": {"de": "Claude setzt ab {zeit} selbst fort", "en": "Claude continues at {zeit} by itself"},
+    "app_kontext": {"de": "Kontext", "en": "Context"},
+    "app_kontext_leer": {"de": "–", "en": "–"},
+    "app_kontext_tokens": {"de": "{tokens} / {fenster}", "en": "{tokens} / {fenster}"},
+    "app_kontext_quelle_statusline": {"de": "Statusline", "en": "Status line"},
+    "app_kontext_quelle_transcript": {"de": "Transcript", "en": "Transcript"},
+    "app_kontext_quelle_rollout": {"de": "Codex-Protokoll", "en": "Codex log"},
+    "app_kontext_ok": {"de": "Kontext ok", "en": "Context ok"},
+    "app_kontext_warnung": {"de": "Kontext-Warnung", "en": "Context warning"},
+    "app_kontext_kritisch": {"de": "Kontext kritisch", "en": "Context critical"},
+    "app_kontext_schwellen": {"de": "Kontext-Schwellen", "en": "Context thresholds"},
+    "app_kontext_warnung_schwelle": {"de": "Kontext: Warnung", "en": "Context: warning"},
+    "app_kontext_kritisch_schwelle": {"de": "Kontext: kritisch", "en": "Context: critical"},
+    "app_nativ": {"de": "Claude setzt selbst fort", "en": "Claude continues by itself"},
 }

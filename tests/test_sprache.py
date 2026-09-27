@@ -64,7 +64,7 @@ class EnglischTest(TempHome):
         reset = self.now + 3600
         util.schreib_json(util.pfad("state", "current.json"), {
             "version": 1, "stand": self.now, "pausiert": False, "puffer_s": 120, "hook_max_alter_s": 600,
-            "sprache": "en", "name": "",
+            "sprache": "en", "name": "", "claude_stopp_art": "geordnet",
             "claude": {"phase": "stopp", "art": "fuenf", "pct": 93, "reset": reset, "fenster_id": "f",
                        "pct5": 93, "reset5": reset, "pctw": 40, "resetw": reset + 86400, "reserve_erreicht": False}})
         env = dict(os.environ, ORCA_TERMINAL_HANDLE="term_x", ORCA_PANE_KEY="a:b")
@@ -79,6 +79,12 @@ class EnglischTest(TempHome):
         self.assertIn("No new subagents", out["hookSpecificOutput"]["permissionDecisionReason"])
         block = ruf(dict(basis, hook_event_name="Stop", stop_hook_active=False))
         self.assertIn("WIP commit", block["reason"])
+        cur = util.lies_json(util.pfad("state", "current.json"))
+        cur["claude_stopp_art"] = "sanft"
+        util.schreib_json(util.pfad("state", "current.json"), cur)
+        out = ruf(dict(basis, session_id="s-en2", hook_event_name="PreToolUse", tool_name="Workflow"))
+        self.assertIn("limit close", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIsNone(ruf(dict(basis, session_id="s-en2", hook_event_name="Stop", stop_hook_active=False)))
         for praefix in texte.PRAEFIXE:
             ruf(dict(basis, hook_event_name="UserPromptSubmit", prompt=praefix + " The usage limit has reset."))
             from lw import register

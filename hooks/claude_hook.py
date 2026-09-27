@@ -3,12 +3,15 @@
 
 Ereignisse:
   SessionStart / UserPromptSubmit  Sitzung registrieren (Ort orca/terminal/desktop, in Orca mit Terminal-Handle);
-                                    Reserve-Sperre der eingebauten Fortsetzung;
-                                    '#nacht' schaltet den Nachtmodus (block, geht nicht ans Modell); ohne Nachtmodus
-                                    wird Claudes eingebaute Fortsetzung gesperrt (v1.1, [fortsetzen] nur_mit_nachtmodus)
+                                    Reserve-Sperre der eingebauten Fortsetzung (sonst wird sie seit 1.4 nie gesperrt,
+                                    "nativ zuerst"); '#nacht' schaltet den Nachtmodus (block, geht nicht ans Modell)
   PreToolUse (Agent|Task|Workflow)  im STOPP/LIMIT: deny (keine neuen Subagents/Workflows)
   PostToolUse                       im STOPP einmal je Sitzung und Fenster: additionalContext
-  Stop                              im STOPP einmal: decision=block mit Sicherungsauftrag, danach gestoppt
+  Stop                              nur beim geordneten Stopp (Woche/Reserve oder claude_stopp_art = "geordnet")
+                                    einmal: decision=block mit Sicherungsauftrag, danach gestoppt. Der sanfte Stopp
+                                    (Standard am 5h-Stopp) verweigert nur neue Subagents/Workflows und gibt einmal
+                                    je Sitzung und Fenster einen kurzen Hinweis.
+  Kontext (v1.4)                    optional ([kontext] hinweis_an_sitzung): einmal je Stufe additionalContext
   StopFailure (rate_limit)          Sitzung am Limit, Reset aus dem Transcript (quotaLimits)
   Notification (quota_auto_resume_*, permission_prompt), PermissionDenied, SessionEnd: Register/Bericht
 
@@ -26,7 +29,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lw import nacht, orte, phasen, quellen, register, sprache, texte, util  # noqa: E402
+from lw import kontextfenster, nacht, orte, phasen, quellen, register, sprache, texte, util  # noqa: E402
 from lw.sprache import t  # noqa: E402
 
 GESPERRTE_WERKZEUGE = {"Agent", "Task", "Workflow"}
@@ -77,6 +80,42 @@ def _basis(payload, env, ort):
     return setzen
 
 
+KX_STUFE = {"ok": 0, "warnung": 1, "kritisch": 2}
+
+
+def kontext_hinweis(payload, cur, sid):
+    """v1.4 N4: einmal je Stufe ein kurzer Hinweis an die Sitzung ([kontext] hinweis_an_sitzung). Nach einer
+    Kompaktierung (wieder ok) darf er erneut kommen. -> Text oder None."""
+    kc = cur.get("kontext") or {}
+    if not kc.get("hinweis"):
+        return None
+    kx = kontextfenster.lesen("claude", sid) \
+        or kontextfenster.aus_transcript(payload.get("transcript_path"), kc.get("standard_fenster") or 200000)
+    if not kx:
+        return None
+    stufe = kontextfenster.stufe(kx["prozent"], kc.get("warnung", 70), kc.get("kritisch", 85))
+    nr = KX_STUFE.get(stufe, 0)
+    d = register.lesen("claude", sid) or {}
+    alt = int(d.get("kontext_hinweis") or 0)
+    if nr == alt or (nr < alt and nr > 0):
+        return None
+
+    def merken(d):
+        d["kontext_hinweis"] = nr
+    register.aktualisieren("claude", sid, merken)
+    return texte.kontext_hinweis(kx) if nr > alt else None
+
+
+def _mit_kontext(ausgabe, ev, extra):
+    """additionalContext um den Kontext-Hinweis ergänzen (oder neu anlegen)."""
+    if not extra:
+        return ausgabe
+    ausgabe = ausgabe or {}
+    hso = ausgabe.setdefault("hookSpecificOutput", {"hookEventName": ev})
+    hso["additionalContext"] = (hso.get("additionalContext") + "\n" if hso.get("additionalContext") else "") + extra
+    return ausgabe
+
+
 def verarbeiten(payload, env, now):
     ev = payload.get("hook_event_name") or ""
     sid = payload.get("session_id")
@@ -91,31 +130,26 @@ def verarbeiten(payload, env, now):
     phase = (p or {}).get("phase", "ok")
     puffer = cur.get("puffer_s", STANDARD_PUFFER_S)
     basis = _basis(payload, env, ort)
+    sanft = bool(p) and phasen.claude_sanft(cur.get("claude_stopp_art"), p)   # v1.4 N2
 
     if ev == "PreToolUse":
         if p and phase in ("stopp", "limit") and payload.get("tool_name") in GESPERRTE_WERKZEUGE:
-            util.log(f"HOOK deny {payload.get('tool_name')} in {sid[:8]} ({phase})")
+            util.log(f"HOOK deny {payload.get('tool_name')} in {sid[:8]} ({phase}{', sanft' if sanft else ''})")
+            grund = texte.sanft_deny(p, now) if sanft else texte.deny_grund(p, now)
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                           "permissionDecisionReason": texte.deny_grund(p, now)}}
+                                           "permissionDecisionReason": grund}}
         return None
 
     if unter:
         return None                                  # sonst nur Hauptsitzung
 
     if ev == "PostToolUse":
-        if not p or phase != "stopp":
-            return None
-        fid = p.get("fenster_id")
-        d = register.lesen("claude", sid) or {}
-        if register.hinweis_gesetzt(d, fid, "post"):
-            return None
-
-        def post(d):
-            basis(d)
-            register.setze_hinweis(d, fid, "post")
-        register.aktualisieren("claude", sid, post, "Stopp-Hinweis (PostToolUse)")
-        return {"hookSpecificOutput": {"hookEventName": "PostToolUse",
-                                       "additionalContext": texte.stopp_kontext(p, now)}}
+        ausgabe = None
+        if p and phase == "stopp":
+            ausgabe = _einmal_hinweis(sid, p, basis, sanft, "PostToolUse", now)
+        if grund == "pausiert":
+            return ausgabe
+        return _mit_kontext(ausgabe, "PostToolUse", kontext_hinweis(payload, cur, sid))
 
     if ev == "SessionStart":
         def start(d):
@@ -150,6 +184,7 @@ def verarbeiten(payload, env, now):
         if prompt.startswith(texte.EINGEBAUT_PRAEFIX):
             aktuell = grund in ("aktuell", "abgelaufen")
             c = cur.get("claude") or {}
+            # v1.4 N1 "nativ zuerst": nur die Wochenreserve sperrt Claudes eingebaute Fortsetzung, nie der Nachtmodus
             if aktuell and cur.get("reserve_sperre", True) and c.get("reserve_erreicht"):
                 def reserve(d):
                     basis(d)
@@ -157,15 +192,6 @@ def verarbeiten(payload, env, now):
                 register.aktualisieren("claude", sid, reserve, "eingebaute Fortsetzung wegen Reserve gesperrt")
                 util.ereignis("reserve_gesperrt", anbieter="claude", sitzung=sid, cwd=payload.get("cwd"))
                 return {"decision": "block", "reason": texte.reserve_block(c, now)}
-            if aktuell and cur.get("nur_nacht") and not nacht.aktiv(register.lesen("claude", sid), now):
-                def gesperrt(d):
-                    basis(d)
-                    if d.get("status") != "wartet_auf_weiter":   # schon gemeldet: kein zweiter Push
-                        d["weiter_gemeldet"] = False
-                    d["status"] = "wartet_auf_weiter"
-                register.aktualisieren("claude", sid, gesperrt, "eingebaute Fortsetzung gesperrt (kein Nachtmodus)")
-                util.ereignis("eingebaut_gesperrt", anbieter="claude", sitzung=sid, cwd=payload.get("cwd"))
-                return {"decision": "block", "reason": texte.weiter_block(now)}
             neu, notiz = "eingebaut_fortgesetzt", "eingebaute Fortsetzung"
             util.ereignis("eingebaut", anbieter="claude", sitzung=sid, cwd=payload.get("cwd"),
                           weg="eingebaute Fortsetzung")
@@ -179,8 +205,13 @@ def verarbeiten(payload, env, now):
             d["status"] = neu
         register.aktualisieren("claude", sid, prompt_da, notiz)
         if p and phase in ("stopp", "limit"):
-            ausgabe = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                              "additionalContext": texte.prompt_hinweis(p, now)}}
+            if sanft:
+                ausgabe = _einmal_hinweis(sid, p, basis, sanft, "UserPromptSubmit", now)
+            else:
+                ausgabe = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                                  "additionalContext": texte.prompt_hinweis(p, now)}}
+        if grund != "pausiert":
+            ausgabe = _mit_kontext(ausgabe, "UserPromptSubmit", kontext_hinweis(payload, cur, sid))
         return ausgabe or None
 
     if ev == "Stop":
@@ -192,6 +223,8 @@ def verarbeiten(payload, env, now):
             if status == "sicherung":
                 d["status"] = "gestoppt"
                 util.ereignis("gestoppt", anbieter="claude", sitzung=sid, cwd=d.get("cwd"))
+            elif p and phase == "stopp" and sanft:
+                d["status"] = "aktiv"                # v1.4 N2: kein Stop-Block, nicht als gestoppt registrieren
             elif p and phase == "stopp":
                 fid = p.get("fenster_id")
                 if not register.hinweis_gesetzt(d, fid, "stop") and not payload.get("stop_hook_active"):
@@ -250,8 +283,8 @@ def verarbeiten(payload, env, now):
         if neu:
             def quota(d):
                 basis(d)
-                if neu == "eingebaut_fortgesetzt" and d.get("status") == "wartet_auf_weiter":
-                    return                                   # schon gesperrt (UserPromptSubmit kam zuerst)
+                if neu == "eingebaut_fortgesetzt" and d.get("status") == "reserve":
+                    return                                   # wegen Reserve gesperrt (UserPromptSubmit kam zuerst)
                 d["status"] = neu
                 if neu in ("stale", "disabled"):
                     r = d.get("reset")
@@ -280,6 +313,21 @@ def verarbeiten(payload, env, now):
         register.aktualisieren("claude", sid, ende, f"SessionEnd {payload.get('reason') or ''}".strip())
         return None
     return None
+
+
+def _einmal_hinweis(sid, p, basis, sanft, ev, now):
+    """Stopp-Hinweis höchstens einmal je Sitzung und Fenster (sanft: kurzer Text, geordnet: Stopp-Auftrag)."""
+    fid = p.get("fenster_id")
+    d = register.lesen("claude", sid) or {}
+    if register.hinweis_gesetzt(d, fid, "post"):
+        return None
+
+    def post(d):
+        basis(d)
+        register.setze_hinweis(d, fid, "post")
+    register.aktualisieren("claude", sid, post, f"Stopp-Hinweis ({ev}{', sanft' if sanft else ''})")
+    text = texte.sanft_kontext(p, now) if sanft else texte.stopp_kontext(p, now)
+    return {"hookSpecificOutput": {"hookEventName": ev, "additionalContext": text}}
 
 
 def main():

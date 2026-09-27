@@ -47,8 +47,18 @@ Hard rules (never break them):
 4. Ask me, one question at a time, with your recommendation:
    - Language of notifications and texts: English or German (`sprache = "en" | "de"`).
    - Optional: my first name for the texts the hooks show to Claude.
-   - Thresholds: keep the defaults (warn 80 %, orderly stop 92 %, weekly reserve 20 %) or change them.
-   - Whether sessions should be continued automatically after the reset (`[fortsetzen] aktiv = true/false`), and whether only sessions in night mode are continued (`nur_mit_nachtmodus = true`, default; `false` = continue every session, as in 1.0).
+   - Thresholds: keep the defaults (warn 80 %, stop 92 %, weekly reserve 20 %) or change them.
+   - What Claude gets at the 5-hour stop (`[schwellen] claude_stopp_art`): `"sanft"` (default: no new
+     subagents/workflows and one short note; Claude keeps working and its built-in auto-continue handles the limit)
+     or `"geordnet"` (checkpoint request and pause, as up to 1.3). The weekly stop, the weekly reserve and Codex
+     always get the orderly stop.
+   - Whether the watchdog should continue sessions itself after the reset (`[fortsetzen] aktiv = true/false`), and
+     whether only sessions in night mode (`nur_mit_nachtmodus = true`, default; `false` = every session, as in 1.0).
+     Explain that Claude's built-in auto-continue is never blocked (only by the weekly reserve).
+   - Context levels per session (`[kontext] warnung = 70`, `kritisch = 85`; one push per session and level), and
+     whether Claude itself should get a short note at each level (`hinweis_an_sitzung`, default false).
+   - Whether to show the watchdog's own line below the Claude Code status line (`[statusline] anzeigen = true`,
+     default; the existing status line keeps running first and unchanged).
    - Whether to read the official usage numbers (`[daten] offiziell = true`, default). Explain honestly: it is an
      undocumented, read-only usage endpoint (the one Claude Desktop / ChatGPT use for their usage display) that
      uses my existing Claude Code / Codex login; the token is never stored, logged or renewed; `false` = Orca /
@@ -62,7 +72,8 @@ Hard rules (never break them):
    a keychain item, the state folder ~/.limit-waechter) and wait for my OK. Then run `./install.sh`.
    Afterwards:
    - Show the diff between ~/.claude/settings.json and the newest backup in ~/.limit-waechter/backups/
-     and confirm that only lines were added and no existing hook was changed.
+     and confirm that only lines were added and no existing hook was changed (the `statusLine` entry is wrapped:
+     the original command is saved in ~/.limit-waechter/state/statusline-original.json and still runs first).
    - Confirm that ~/.codex/hooks.json is unchanged.
    - Run `./waechter.py status` and check that the LaunchAgent is loaded and the last tick is recent.
    Optional menu bar app: ask me whether I want it. It needs macOS 14+ and the Xcode Command Line Tools

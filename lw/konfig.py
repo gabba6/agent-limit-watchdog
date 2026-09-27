@@ -26,6 +26,21 @@ STANDARD = {
         "woche_warnung": 80,    # % im Wochenfenster
         "woche_stopp": 92,      # % im Wochenfenster
         "wochen_reserve": 20,   # ab 100 - Reserve % Wochenverbrauch keine automatische Fortsetzung
+        "claude_stopp_art": "sanft",  # v1.4: "sanft" = am 5h-Stopp nur neue Subagents/Workflows verweigern;
+                                      # "geordnet" = Sicherungsauftrag wie bis 1.3 (Woche/Reserve immer geordnet)
+    },
+    "kontext": {                  # v1.4: Kontextfüllstand je Sitzung
+        "warnung": 70,            # % des Kontextfensters: Push/Banner
+        "kritisch": 85,
+        "melden": True,           # einmal je Sitzung und Stufe Push + Banner
+        "hinweis_an_sitzung": False,   # Claude bekommt einmal je Stufe einen kurzen Hinweis (additionalContext)
+        "standard_fenster": 200000,    # Fenster, wenn weder Claude noch die Modellkennung es nennen
+    },
+    "statusline": {               # v1.4: eigene sichtbare Zeile unter der Original-Statusline
+        "anzeigen": True,
+    },
+    "anzeige": {                  # v1.4
+        "ruht_stunden": 12,       # ruhende Sitzungen in status/App nur zeigen, wenn jünger
     },
     "fortsetzen": {
         "aktiv": True,
@@ -208,6 +223,8 @@ def pruefen(k):
             fehler.append(sprache.t("kf_warnung_stopp"))
         if s["woche_warnung"] > s["woche_stopp"]:
             fehler.append(sprache.t("kf_woche"))
+    if s.get("claude_stopp_art", "sanft") not in ("sanft", "geordnet"):
+        fehler.append(sprache.t("kx_kf_stopp_art"))
     if k["allgemein"]["sprache"] not in ("de", "en"):
         fehler.append('allgemein.sprache muss "de" oder "en" sein')
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", str(k["allgemein"]["launchagent_label"])):
@@ -408,3 +425,28 @@ def _pruefen_wach(k):
 
 
 PRUEF_ZUSATZ.append(_pruefen_wach)
+
+
+# ---- v1.4: Kontext, Statusline-Zeile, Anzeige ----
+def _pruefen_kontext(k):
+    kx = k.get("kontext") or {}
+    fehler = []
+    w, kr = kx.get("warnung"), kx.get("kritisch")
+    for name, wert in (("warnung", w), ("kritisch", kr)):
+        if isinstance(wert, bool) or not isinstance(wert, int) or not 1 <= wert <= 99:
+            fehler.append(sprache.t("fs_kf_bereich", name=f"kontext.{name}", min=1, max=99))
+    if not fehler and w >= kr:
+        fehler.append(sprache.t("kx_kf_reihenfolge"))
+    fen = kx.get("standard_fenster")
+    if isinstance(fen, bool) or not isinstance(fen, int) or fen < 1000:
+        fehler.append(sprache.t("kx_kf_fenster"))
+    for abschnitt, name in (("kontext", "melden"), ("kontext", "hinweis_an_sitzung"), ("statusline", "anzeigen")):
+        if not isinstance((k.get(abschnitt) or {}).get(name), bool):
+            fehler.append(sprache.t("fs_kf_bool", name=f"{abschnitt}.{name}"))
+    rh = (k.get("anzeige") or {}).get("ruht_stunden")
+    if isinstance(rh, bool) or not isinstance(rh, (int, float)) or not 0 <= rh <= 168:
+        fehler.append(sprache.t("kx_kf_ruht"))
+    return fehler
+
+
+PRUEF_ZUSATZ.append(_pruefen_kontext)

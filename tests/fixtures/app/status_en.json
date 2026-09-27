@@ -1,7 +1,7 @@
 {
  "version": "1.4",
  "jetzt": 1790447300.0,
- "sprache": "de",
+ "sprache": "en",
  "phasen": {
   "claude": {
    "anbieter": "claude",
@@ -20,10 +20,10 @@
    "veraltet": false,
    "quelle": "offiziell",
    "hat_daten": true,
-   "quelle_text": "offiziell",
+   "quelle_text": "official",
    "woche_modell": [
     {
-     "name": "Fable",
+     "name": "Opus",
      "pct": 41.0,
      "reset": 1790470800.0
     }
@@ -46,7 +46,7 @@
    "veraltet": false,
    "quelle": "rollout",
    "hat_daten": true,
-   "quelle_text": "Codex-Protokoll",
+   "quelle_text": "Codex log",
    "woche_modell": []
   }
  },
@@ -62,7 +62,7 @@
   "zustand": "aktiv",
   "stand": 1790447250.0
  },
- "nacht": 1790474400.0,
+ "nacht": null,
  "nur_mit_nachtmodus": true,
  "bericht_uhrzeit": "08:00",
  "schwellen": {
@@ -74,18 +74,9 @@
  },
  "sitzungen": [
   {
-   "anbieter": "claude",
-   "id": "11111111-2222-3333-4444-555555555555",
-   "cwd": "/Users/alex/Projects/demo-app",
-   "projekt": "demo-app",
-   "status": "aktiv",
-   "status_text": "aktiv",
-   "wartet": false,
-   "automatisch": true,
-   "zuletzt": 1790447000.0,
-   "nacht_bis": 1790474400.0,
+   "nacht_bis": null,
    "nacht_eigen": null,
-   "nacht_global": 1790474400.0,
+   "nacht_global": null,
    "ort": "orca",
    "ort_text": "Orca",
    "faehigkeiten": {
@@ -93,9 +84,18 @@
     "stoppen": "ja",
     "fortsetzen": "ja"
    },
-   "faehigkeiten_text": "warnt · stoppt · setzt fort",
+   "faehigkeiten_text": "warns · stops · continues",
+   "wartet": false,
+   "automatisch": true,
+   "anbieter": "claude",
+   "id": "11111111-2222-3333-4444-555555555555",
+   "cwd": "/Users/alex/Projects/demo-app",
+   "projekt": "demo-app",
+   "status": "aktiv",
+   "status_text": "active",
+   "zuletzt": 1790447250.0,
    "lage": "arbeitet",
-   "lage_text": "arbeitet",
+   "lage_text": "working",
    "lage_farbe": "gruen",
    "aktivitaet": {
     "letzte": 1790447260.0,
@@ -112,19 +112,9 @@
    }
   },
   {
-   "anbieter": "claude",
-   "id": "66666666-7777-8888-9999-000000000000",
-   "cwd": "/Users/alex/Projects/website",
-   "projekt": "website",
-   "status": "gestoppt",
-   "status_text": "gestoppt",
-   "wartet": true,
-   "automatisch": false,
-   "zuletzt": 1790440000.0,
-   "fortsetzen_ab": 1790451120.0,
-   "nacht_bis": 1790488800.0,
-   "nacht_eigen": 1790488800.0,
-   "nacht_global": 1790474400.0,
+   "nacht_bis": null,
+   "nacht_eigen": null,
+   "nacht_global": null,
    "ort": "terminal",
    "ort_text": "Terminal",
    "faehigkeiten": {
@@ -132,73 +122,38 @@
     "stoppen": "ja",
     "fortsetzen": "push"
    },
-   "faehigkeiten_text": "warnt · stoppt · nur Push",
+   "faehigkeiten_text": "warns · stops · push only",
+   "wartet": true,
+   "automatisch": true,
+   "anbieter": "claude",
+   "id": "66666666-7777-8888-9999-000000000000",
+   "cwd": "/Users/alex/Projects/website",
+   "projekt": "website",
+   "status": "eingebaut_wartet",
+   "status_text": "Claude waiting (built-in)",
+   "zuletzt": 1790446000.0,
+   "fortsetzen_ab": 1790451120.0,
    "lage": "wartet",
-   "lage_text": "wartet bis 21:32",
+   "lage_text": "Claude continues at 21:32 by itself",
    "lage_farbe": "blau",
    "aktivitaet": {
-    "letzte": 1790440000.0,
+    "letzte": 1790445990.0,
     "quelle": "transcript"
    },
    "kontext": {
-    "prozent": 88.0,
-    "tokens": 176000,
+    "prozent": 77.5,
+    "tokens": 155000,
     "fenster": 200000,
     "modell": "Sonnet 5",
-    "stufe": "kritisch",
-    "stand": 1790440000.0,
-    "quelle": "transcript"
-   }
-  },
-  {
-   "anbieter": "codex",
-   "id": "01a0da88-ad20-7542-b024-9d2ddfe7cc90",
-   "cwd": "/Users/alex/Projects/api",
-   "projekt": "api",
-   "status": "wartet_auf_weiter",
-   "status_text": "wartet auf „weiter“",
-   "zuletzt": 1790430000.0,
-   "nacht_bis": 1790474400.0,
-   "nacht_eigen": null,
-   "nacht_global": 1790474400.0,
-   "ort": "desktop",
-   "ort_text": "Desktop",
-   "faehigkeiten": {
-    "warnen": "ja",
-    "stoppen": "nein",
-    "fortsetzen": "push"
-   },
-   "faehigkeiten_text": "warnt · stoppt nicht · nur Push",
-   "lage": "weiter_noetig",
-   "lage_text": "„weiter“ nötig",
-   "lage_farbe": "orange",
-   "aktivitaet": {
-    "letzte": 1790430000.0,
-    "quelle": "rollout"
-   },
-   "kontext": {
-    "prozent": 72.4,
-    "tokens": 197000,
-    "fenster": 272000,
-    "modell": "gpt-5.5-codex",
     "stufe": "warnung",
-    "stand": 1790430000.0,
-    "quelle": "rollout"
+    "stand": 1790445990.0,
+    "quelle": "statusline"
    }
   },
   {
-   "anbieter": "claude",
-   "id": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
-   "cwd": "/Users/alex/Projects/docs-site",
-   "projekt": "docs-site",
-   "status": "blockiert",
-   "status_text": "blockiert",
-   "wartet": false,
-   "automatisch": true,
-   "zuletzt": 1790444300.0,
    "nacht_bis": 1790474400.0,
-   "nacht_eigen": null,
-   "nacht_global": 1790474400.0,
+   "nacht_eigen": 1790474400.0,
+   "nacht_global": null,
    "ort": "orca",
    "ort_text": "Orca",
    "faehigkeiten": {
@@ -206,40 +161,68 @@
     "stoppen": "ja",
     "fortsetzen": "ja"
    },
-   "faehigkeiten_text": "warnt · stoppt · setzt fort",
-   "lage": "blockiert",
-   "lage_text": "blockiert",
-   "lage_farbe": "rot",
+   "faehigkeiten_text": "warns · stops · continues",
+   "wartet": false,
+   "automatisch": true,
+   "anbieter": "codex",
+   "id": "01a0da88-ad20-7542-b024-9d2ddfe7cc90",
+   "cwd": "/Users/alex/Projects/api",
+   "projekt": "api",
+   "status": "aktiv",
+   "status_text": "active",
+   "zuletzt": 1790447100.0,
+   "lage": "arbeitet",
+   "lage_text": "working",
+   "lage_farbe": "gruen",
    "aktivitaet": {
-    "letzte": 1790444200.0,
-    "quelle": "transcript"
+    "letzte": 1790447150.0,
+    "quelle": "rollout"
    },
-   "kontext": null
+   "kontext": {
+    "prozent": 87.1,
+    "tokens": 237000,
+    "fenster": 272000,
+    "modell": "gpt-5.5-codex",
+    "stufe": "kritisch",
+    "stand": 1790447150.0,
+    "quelle": "rollout"
+   }
   },
   {
-   "anbieter": "claude",
-   "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-   "cwd": null,
-   "status": "beendet",
-   "status_text": "beendet",
-   "zuletzt": 1790200000.0,
-   "nacht_bis": 1790474400.0,
+   "nacht_bis": null,
    "nacht_eigen": null,
-   "nacht_global": 1790474400.0,
-   "lage": "beendet",
-   "lage_text": "beendet",
+   "nacht_global": null,
+   "ort": "orca",
+   "ort_text": "Orca",
+   "faehigkeiten": {
+    "warnen": "ja",
+    "stoppen": "ja",
+    "fortsetzen": "ja"
+   },
+   "faehigkeiten_text": "warns · stops · continues",
+   "wartet": false,
+   "automatisch": true,
+   "anbieter": "claude",
+   "id": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+   "cwd": "/Users/alex/Projects/docs-site",
+   "projekt": "docs-site",
+   "status": "aktiv",
+   "status_text": "active",
+   "zuletzt": 1790440300.0,
+   "lage": "ruht",
+   "lage_text": "idle",
    "lage_farbe": "grau",
    "aktivitaet": {
-    "letzte": null,
-    "quelle": null
+    "letzte": 1790440200.0,
+    "quelle": "transcript"
    },
    "kontext": null
   }
  ],
  "gesamt": {
   "stufe": "warnung",
-  "text": "Claude: Warnung – 84 % (Reset 21:30)",
-  "detail": "Wartende Sitzungen laufen nach dem Reset automatisch weiter"
+  "text": "Claude: warning - 84% (resets 21:30)",
+  "detail": "Claude continues by itself after the reset"
  },
  "offiziell": {
   "claude": {
@@ -248,9 +231,9 @@
    "stand": 1790447240.0
   },
   "codex": {
-   "zustand": "fehler",
-   "fehler": "auth",
-   "stand": null
+   "zustand": "ok",
+   "fehler": null,
+   "stand": 1790447180.0
   }
  },
  "wach": {
@@ -262,7 +245,7 @@
   "zugeklappt_ok": true,
   "netzteil": true,
   "amphetamine": "bereit",
-  "text": "Wach bis morgen 04:00 (Amphetamine, zugeklappt ok)"
+  "text": "Awake until tomorrow 04:00 (Amphetamine, lid closed ok)"
  },
  "kontext_schwellen": {
   "warnung": 70,

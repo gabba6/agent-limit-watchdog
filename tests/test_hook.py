@@ -23,17 +23,24 @@ class HookTest(TempHome):
         self.reset = self.now + 3600
         self.current("ok")
 
-    def current(self, phase, pct=None, reserve=False, stand=None, reset=None, nur_nacht=False, nur_orca=None):
+    def current(self, phase, pct=None, reserve=False, stand=None, reset=None, nur_nacht=False, nur_orca=None,
+                art=None, woche=False, kontext=None):
         reset = reset or self.reset
         pct = pct if pct is not None else {"ok": 20, "warnung": 82, "stopp": 93, "limit": 100}[phase]
         util.schreib_json(util.pfad("state", "current.json"), {
             "version": 1, "stand": stand or self.now, "pausiert": False, "puffer_s": 120, "reserve_sperre": True,
             "hook_max_alter_s": 600, "sprache": self.sprache, "name": "",
             "nur_nacht": nur_nacht, "nacht_ende": "08:00",
-            "claude": {"phase": phase, "art": "fuenf", "pct": pct, "reset": reset,
+            "claude": {"phase": phase, "art": "woche" if woche else "fuenf", "pct": pct, "reset": reset,
                        "fenster_id": f"claude-fuenf-{int(round(reset / 600))}", "pct5": pct, "reset5": reset,
                        "pctw": 85.0 if reserve else 40.0, "resetw": self.now + 3 * 86400,
                        "reserve_erreicht": reserve}})
+        cur = util.lies_json(util.pfad("state", "current.json"))
+        if art:
+            cur["claude_stopp_art"] = art
+        if kontext:
+            cur["kontext"] = kontext
+        util.schreib_json(util.pfad("state", "current.json"), cur)
         if nur_orca is not None:
             cur = util.lies_json(util.pfad("state", "current.json"))
             cur["nur_orca"] = nur_orca
@@ -92,7 +99,7 @@ class HookTest(TempHome):
         self.ruf("SessionStart", source="startup")
         s = self.sitzung()
         self.assertEqual((s["terminal"], s["pane_key"], s["worktree"]), ("term_test", "tabT:leafT", "/tmp/projekt"))
-        self.current("stopp")
+        self.current("stopp", art="geordnet")
         post = self.ruf("PostToolUse", tool_name="Bash")
         self.assertIn("Stopp-Phase", post["hookSpecificOutput"]["additionalContext"])
         self.assertIsNone(self.ruf("PostToolUse", tool_name="Bash"), "nur einmal je Fenster")
@@ -117,19 +124,19 @@ class HookTest(TempHome):
         self.assertTrue(self.sitzung()["reserve_bei_halt"])
 
     def test_stop_hook_active_blockt_nie(self):
-        self.current("stopp")
+        self.current("stopp", art="geordnet")
         self.assertIsNone(self.ruf("Stop", stop_hook_active=True))
         self.assertEqual(self.sitzung()["status"], "gestoppt")
 
     def test_sicherung_endet_auch_nach_reset_als_gestoppt(self):
-        self.current("stopp")
+        self.current("stopp", art="geordnet")
         self.ruf("Stop", stop_hook_active=False)
         self.current("ok", reset=self.now + 5 * 3600)
         self.ruf("Stop", stop_hook_active=True)
         self.assertEqual(self.sitzung()["status"], "gestoppt")
 
     def test_stop_im_ok_setzt_aktiv(self):
-        self.current("stopp")
+        self.current("stopp", art="geordnet")
         self.ruf("Stop", stop_hook_active=True)
         self.current("ok", reset=self.now + 5 * 3600)
         self.ruf("UserPromptSubmit", prompt="Limit-Wächter: Das Nutzungslimit ist zurückgesetzt. …")
@@ -214,14 +221,13 @@ class HookTest(TempHome):
         self.assertIsNone(self.ruf("UserPromptSubmit", prompt="#nachtschicht planen"))
         self.assertEqual(self.sitzung()["status"], "aktiv")
 
-    def test_eingebaut_ohne_nachtmodus_gesperrt(self):
+    def test_eingebaut_ohne_nachtmodus_nie_gesperrt(self):
+        """v1.4 N1 „nativ zuerst“: Claudes Auto-Continue läuft auch ohne Nachtmodus frei."""
         self.current("ok", nur_nacht=True)
-        out = self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT)
-        self.assertEqual(out["decision"], "block")
-        self.assertIn("weiter", out["reason"])
-        s = self.sitzung()
-        self.assertEqual((s["status"], s["weiter_gemeldet"]), ("wartet_auf_weiter", False))
-        self.assertEqual(util.lies_ereignisse()[-1]["typ"], "eingebaut_gesperrt")
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT))
+        self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
+        self.assertEqual(util.lies_ereignisse()[-1]["typ"], "eingebaut")
+        self.assertNotIn("eingebaut_gesperrt", [e["typ"] for e in util.lies_ereignisse()])
 
     def test_eingebaut_mit_nachtmodus_frei(self):
         self.current("ok", nur_nacht=True)
@@ -243,19 +249,29 @@ class HookTest(TempHome):
         util.schreib_json(util.pfad("state", "pause.json"), {"aktiv": True, "bis": None})
         self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT), "pausiert -> nicht sperren")
 
-    def test_eingebaut_nach_weiter_push_kein_zweiter_push(self):
+    def test_eingebaut_nach_weiter_setzt_fort(self):
         self.current("ok", nur_nacht=True)
         register.aktualisieren("claude", self.SID, lambda d: d.update(status="wartet_auf_weiter",
                                                                       weiter_gemeldet=True))
-        self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT)
-        s = self.sitzung()
-        self.assertEqual((s["status"], s["weiter_gemeldet"]), ("wartet_auf_weiter", True))
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT))
+        self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
+        register.aktualisieren("claude", self.SID, lambda d: d.update(status="wartet_auf_weiter"))
+        self.ruf("Notification", notification_type="quota_auto_resume_fired", message="x")
+        self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
 
-    def test_fired_nach_sperre_ueberschreibt_nicht(self):
-        self.current("ok", nur_nacht=True)
+    def test_fired_nach_reserve_sperre_ueberschreibt_nicht(self):
+        self.current("ok", reserve=True)
         self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT)
         self.ruf("Notification", notification_type="quota_auto_resume_fired", message="x")
-        self.assertEqual(self.sitzung()["status"], "wartet_auf_weiter")
+        self.assertEqual(self.sitzung()["status"], "reserve")
+
+    def test_reserve_sperre_abschaltbar(self):
+        self.current("ok", reserve=True)
+        cur = util.lies_json(util.pfad("state", "current.json"))
+        cur["reserve_sperre"] = False
+        util.schreib_json(util.pfad("state", "current.json"), cur)
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt=self.EINGEBAUT))
+        self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
 
     def test_nacht_aus_bei_globalem_nachtmodus(self):
         self.current("ok", nur_nacht=True)
@@ -270,7 +286,7 @@ class HookTest(TempHome):
         self.assertEqual(self.sitzung()["status"], "reserve")
 
     def test_sicherungsauftrag_je_nach_nachtmodus(self):
-        self.current("stopp", nur_nacht=True)
+        self.current("stopp", nur_nacht=True, art="geordnet")
         block = self.ruf("Stop", stop_hook_active=False)
         self.assertIn("„weiter“", block["reason"])
         self.assertNotIn("automatisch fort", block["reason"])
@@ -280,7 +296,7 @@ class HookTest(TempHome):
         self.assertIn("automatisch", block["reason"])
 
     def test_prompt_hinweis_im_stopp(self):
-        self.current("stopp")
+        self.current("stopp", art="geordnet")
         out = self.ruf("UserPromptSubmit", prompt="mach weiter")
         self.assertIn("gesperrt", out["hookSpecificOutput"]["additionalContext"])
 
@@ -326,7 +342,7 @@ class HookTest(TempHome):
             self.assertNotIn(feld, s)
 
     def test_stop_block_ausserhalb_orca_ohne_automatik(self):
-        self.current("stopp")
+        self.current("stopp", art="geordnet")
         self.assertEqual(self.ruf("PreToolUse", orca=False, tool_name="Agent")["hookSpecificOutput"]
                          ["permissionDecision"], "deny")
         block = self.ruf("Stop", orca=False, stop_hook_active=False)
@@ -338,13 +354,87 @@ class HookTest(TempHome):
 
     def test_eingebaut_ausserhalb_orca(self):
         self.current("ok", nur_nacht=True)
-        out = self.ruf("UserPromptSubmit", orca=False, prompt=self.EINGEBAUT)
-        self.assertEqual(out["decision"], "block")
-        self.assertEqual(self.sitzung()["status"], "wartet_auf_weiter")
+        self.assertIsNone(self.ruf("UserPromptSubmit", orca=False, prompt=self.EINGEBAUT))
+        self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
         self.SID = "22222222-2222-3333-4444-555555555555"
         self.assertEqual(self.ruf("UserPromptSubmit", orca=False, prompt="#nacht")["decision"], "block")
         self.assertIsNone(self.ruf("UserPromptSubmit", orca=False, prompt=self.EINGEBAUT))
         self.assertEqual(self.sitzung()["status"], "eingebaut_fortgesetzt")
+
+    # ------------------------------------------------------------ v1.4 N2: sanfter Stopp (Standard)
+    def test_sanfter_stopp_nur_deny_und_ein_hinweis(self):
+        self.ruf("SessionStart", source="startup")
+        self.current("stopp")                         # ohne claude_stopp_art: Standard sanft
+        for werkzeug in ("Agent", "Task", "Workflow"):
+            out = self.ruf("PreToolUse", tool_name=werkzeug)
+            self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+            grund = out["hookSpecificOutput"]["permissionDecisionReason"]
+            self.assertIn("Limit nah", grund)
+            self.assertIn("laufende dürfen fertig werden", grund)
+        self.assertIsNone(self.ruf("PreToolUse", tool_name="Bash"))
+        post = self.ruf("PostToolUse", tool_name="Bash")
+        self.assertIn("selbst weiterarbeiten", post["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("WIP", post["hookSpecificOutput"]["additionalContext"])
+        self.assertIsNone(self.ruf("PostToolUse", tool_name="Bash"), "nur einmal je Fenster")
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt="weiter so"), "auch kein zweiter Hinweis im Prompt")
+        self.assertIsNone(self.ruf("Stop", stop_hook_active=False), "kein Stop-Block")
+        s = self.sitzung()
+        self.assertEqual(s["status"], "aktiv", "nicht als gestoppt registriert")
+        self.assertIsNone(s.get("fortsetzen_ab"))
+
+    def test_sanfter_stopp_hinweis_auch_zuerst_im_prompt(self):
+        self.current("stopp", art="sanft")
+        out = self.ruf("UserPromptSubmit", prompt="mach weiter")
+        self.assertIn("Nutzungslimit nah", out["hookSpecificOutput"]["additionalContext"])
+        self.assertIsNone(self.ruf("PostToolUse", tool_name="Bash"))
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt="und noch was"))
+
+    def test_geordneter_stopp_bei_woche_und_reserve(self):
+        self.current("stopp", woche=True)             # Standard sanft, aber Wochen-Stopp -> geordnet
+        block = self.ruf("Stop", stop_hook_active=False)
+        self.assertEqual(block["decision"], "block")
+        self.assertIn("WIP-Commit", block["reason"])
+        self.assertEqual(self.sitzung()["status"], "sicherung")
+        self.assertIn("Bis zum Reset", self.ruf("PreToolUse", tool_name="Agent")["hookSpecificOutput"]
+                      ["permissionDecisionReason"])
+        self.SID = "22222222-2222-3333-4444-555555555555"
+        self.current("stopp", reserve=True)           # 5h-Stopp mit Wochenreserve -> geordnet
+        block = self.ruf("Stop", stop_hook_active=False)
+        self.assertEqual(block["decision"], "block")
+        self.assertTrue(self.sitzung()["reserve_bei_halt"])
+
+    # ------------------------------------------------------------ v1.4 N4: Kontext-Hinweis an die Sitzung
+    def test_kontext_hinweis_einmal_je_stufe(self):
+        from lw import kontextfenster
+        kx = {"warnung": 70, "kritisch": 85, "hinweis": True, "standard_fenster": 200000}
+        self.current("ok", kontext=kx)
+
+        def stand(prozent):
+            kontextfenster.speichern("claude", self.SID, {"prozent": prozent, "tokens": prozent * 10000,
+                                                          "fenster": 1000000, "modell": "Opus 5.5",
+                                                          "quelle": "statusline"}, self.now + prozent)
+        stand(50)
+        self.assertIsNone(self.ruf("PostToolUse", tool_name="Bash"))
+        stand(72)
+        out = self.ruf("PostToolUse", tool_name="Bash")
+        self.assertIn("Kontext bei 72 %", out["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("720k / 1M", out["hookSpecificOutput"]["additionalContext"])
+        self.assertIsNone(self.ruf("PostToolUse", tool_name="Bash"), "einmal je Stufe")
+        self.assertIsNone(self.ruf("UserPromptSubmit", prompt="x"))
+        stand(86)
+        out = self.ruf("UserPromptSubmit", prompt="x")
+        self.assertIn("Kontext bei 86 %", out["hookSpecificOutput"]["additionalContext"])
+        stand(20)                                     # kompaktiert: darf wieder kommen
+        self.assertIsNone(self.ruf("PostToolUse", tool_name="Bash"))
+        stand(75)
+        self.assertIsNotNone(self.ruf("PostToolUse", tool_name="Bash"))
+
+    def test_kontext_hinweis_standard_aus(self):
+        from lw import kontextfenster
+        self.current("ok", kontext={"warnung": 70, "kritisch": 85, "hinweis": False})
+        kontextfenster.speichern("claude", self.SID, {"prozent": 90.0, "tokens": 180000, "fenster": 200000,
+                                                      "modell": "Opus 5.5", "quelle": "statusline"}, self.now)
+        self.assertIsNone(self.ruf("PostToolUse", tool_name="Bash"))
 
     def test_nur_orca_und_remote_ignoriert(self):
         self.current("stopp", nur_orca=True)

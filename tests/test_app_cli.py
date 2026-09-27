@@ -266,13 +266,32 @@ class SchwellenTest(CliBasis):
         code, out = self.cli("schwellen", "setzen", "warnung=70", "stopp=90", "--json")
         self.assertEqual(code, 0, out)
         self.assertEqual(json.loads(out), {"ok": True, "schwellen": {"warnung": 70, "stopp": 90, "woche_warnung": 80,
-                                                                     "woche_stopp": 92, "wochen_reserve": 20}})
+                                                                     "woche_stopp": 92, "wochen_reserve": 20,
+                                                                     "kontext_warnung": 70, "kontext_kritisch": 85}})
         code, out = self.cli("thresholds", "set", "weekly_warn=75", "weekly_stop=90", "weekly_reserve=10",
                              "warn=60", "stop=85", "--json")
         self.assertEqual(code, 0, out)
         s = konfig.laden()["schwellen"]
         self.assertEqual((s["warnung"], s["stopp"], s["woche_warnung"], s["woche_stopp"], s["wochen_reserve"]),
                          (60, 85, 75, 90, 10))
+
+    def test_kontext_schwellen_setzen(self):
+        """v1.4 N4: kontext_warnung/kontext_kritisch landen in [kontext] (App und CLI)."""
+        code, out = self.cli("schwellen", "setzen", "kontext_warnung=60", "kontext_kritisch=80", "stopp=91", "--json")
+        self.assertEqual(code, 0, out)
+        d = json.loads(out)["schwellen"]
+        self.assertEqual((d["kontext_warnung"], d["kontext_kritisch"], d["stopp"]), (60, 80, 91))
+        k = konfig.laden()
+        self.assertEqual((k["kontext"]["warnung"], k["kontext"]["kritisch"], k["schwellen"]["stopp"]), (60, 80, 91))
+        with open(self.lokal, encoding="utf-8") as f:
+            self.assertIn("[kontext]", f.read())
+        code, out = self.cli("thresholds", "set", "context_warn=65", "--json")
+        self.assertEqual((code, json.loads(out)["schwellen"]["kontext_warnung"]), (0, 65))
+        for werte in (["kontext_warnung=90"], ["kontext_kritisch=100"], ["kontext_warnung=0"]):
+            with self.subTest(werte=werte):
+                code, out = self.cli("schwellen", "setzen", *werte, "--json")
+                self.assertEqual(code, 2, out)
+                self.assertFalse(json.loads(out)["ok"])
 
     def test_aliase_in_englisch(self):
         self.sprache_setzen("en")

@@ -2,7 +2,7 @@
 
 ## 1.4.0 – 2026-09-27
 
-Correct usage, reliable continuation, awake mode, redesigned app.
+Correct usage, reliable continuation, awake mode, redesigned app, native first, context per session.
 
 - **Official usage numbers.** The tick now reads the same usage display Claude Desktop / claude.ai and ChatGPT
   use (`api.anthropic.com/api/oauth/usage`, `chatgpt.com/backend-api/wham/usage`; read-only, no model call). These
@@ -35,6 +35,30 @@ Correct usage, reliable continuation, awake mode, redesigned app.
   `lage_text`, `lage_farbe`, `aktivitaet`; existing keys are unchanged.
 - Docs: why Claude Desktop and the Codex app are not continued automatically (no official way in; Claude's
   built-in auto-continue covers Claude Desktop).
+- **Native first (behaviour change).** Claude's built-in auto-continue at the usage limit is **never blocked** by the
+  hook any more, also without night mode (only the weekly reserve still blocks it,
+  `reserve_sperrt_eingebaute_fortsetzung`). Night mode now only means: the watchdog steps in where Claude's own
+  continuation does not work (after its grace period: Mac asleep > 30 min, more than 2 cycles, Remote Control, reset
+  more than 24 h away), continues Codex and keeps the Mac awake. Without night mode the watchdog does not intervene;
+  a Claude session at the limit shows “Claude continues at … by itself” instead of “waiting for continue”.
+- **Soft stop for Claude (behaviour change).** At the 5-hour stop threshold Claude only gets new subagents/workflows
+  denied (“limit close – keep working yourself, running ones may finish”) and one short note per session and
+  window; no stop block, no checkpoint request, the session is not registered as stopped. The orderly stop with
+  checkpoint request stays for the weekly stop, the weekly reserve and Codex. New option `[schwellen]
+  claude_stopp_art = "sanft" | "geordnet"` (default `"sanft"`).
+- **Context per session.** New `lw/kontextfenster.py`: context window use (tokens in the context / window of the
+  model) for Claude (status line input, fallback: last transcript entry) and Codex (rollout `token_count`), stored
+  as numbers only in `state/kontext/`. One push + banner per session and level (`[kontext] warnung = 70`,
+  `kritisch = 85`, again after a compaction); optional note to the Claude session (`hinweis_an_sitzung`, default
+  off). `thresholds set kontext_warnung=… kontext_kritisch=…`. `status --json` has per session `kontext`
+  {`prozent`, `tokens`, `fenster`, `modell`, `stufe`, `stand`, `quelle`} (or `null`) and top-level
+  `kontext_schwellen`.
+- **Own line in the Claude Code status line.** After your original status line (unchanged, first, flushed at once)
+  the chain prints `Opus 5.5 · ctx ████░░░░░░ 41% 412k/1M · 5h 63% ↻14:20 · wk 38% · ☾` – ANSI colours by the
+  thresholds, shorter on narrow terminals, no network, never breaks the original. `[statusline] anzeigen = false`
+  switches it off.
+- Idle sessions older than 12 hours are no longer listed in `status` and the app (`[anzeige] ruht_stunden`).
+- English demo data for screenshots: `tests/fixtures/app/status_en.json`.
 
 ## 1.3.0 – 2026-09-26
 

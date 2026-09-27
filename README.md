@@ -8,10 +8,12 @@
 **Stop hitting usage limits blindly.** Agent Limit Watchdog (originally *Limit-Wächter*) watches the usage
 limits of **Claude Code** and **Codex** on your Mac – in [Orca](https://github.com/stablyai/orca) terminals (full
 control) and, since 1.3, also in normal terminals (see [Where the watchdog can do what](#where-the-watchdog-can-do-what)).
-It warns you before the limit, lets running agents **save their work and pause in an orderly way**, and
-**continues them after the reset** – for sessions you put in *night mode*, also while you sleep. Since 1.4 it reads
-the same usage numbers that Claude Desktop and ChatGPT show, checks that a session really runs again before it
-trusts Orca, and keeps the Mac awake by itself (awake mode). It never buys credits.
+It warns you before the limit, keeps agents from starting new subagents or workflows when the limit is close,
+lets Claude's own auto-continue do its job and **steps in where it fails** – and continues Codex – for sessions you
+put in *night mode*, also while you sleep. Since 1.4 it reads the same usage numbers that Claude Desktop and ChatGPT
+show, checks that a session really runs again before it trusts Orca, keeps the Mac awake by itself (awake mode),
+tracks how full each session's **context window** is and adds a compact line to Claude Code's status line. It never
+buys credits.
 
 🇩🇪 Deutsche Bedienungsanleitung: [docs/ANLEITUNG.de.md](docs/ANLEITUNG.de.md)
 
@@ -27,12 +29,20 @@ Night mode: on for all sessions until 08:00
 Claude  5h 94 % (resets 16:30)    week 57 % (resets Sun 03:00)  phase STOP     data 40 s old (official)
 Codex   5h 44 % (resets 22:51)    week 38 % (resets Fri 12:04)  phase OK       data 2 min old (official)
 Thresholds: warn 80 %, stop 92 % (5h) · week 80/92 % · reserve 20 % (no auto-continue above 80 % weekly use)
-Sessions (last 2 days): 4 Claude, 0 Codex
-  claude 7c1e2a9b my-app                       stopped                    · continues from 16:32 · night until 08:00
+Sessions (last 2 days): 4 Claude, 1 Codex
+  claude 7c1e2a9b my-app                       at limit                   · Claude continues by itself after reset 16:32 · context 41%
+  codex  01a0da88 api                          stopped                    · continues from 16:32 · night until 08:00 · context 56%
 Mac: on power yes · sleep disabled: yes · awake with lid closed: yes · Amphetamine: yes
 Claude source: official (40 s ago)
 Codex source: official (2 min ago)
 Awake until 16:47 (Amphetamine, lid closed ok) · screen lock: 5 min · Amphetamine: ready
+Context: warning 70%, critical 85%
+```
+
+And in every Claude Code session, below your own status line (colours follow the thresholds):
+
+```
+Opus 5.5 · ctx ████░░░░░░ 41% 412k/1M · 5h 63% ↻14:20 · wk 38% · ☾
 ```
 
 ## Why
@@ -56,15 +66,18 @@ the built-in auto-continue and only steps in where it does not help.
 |---|---|---|
 | **OK** | below 80 % | nothing |
 | **Warning** | 80 % of the 5-hour or weekly window | push notification + macOS banner |
-| **Stop** | 92 % | Claude: new subagents/workflows are denied; at the end of the turn the agent gets **one** checkpoint request (update status/handoff file, WIP commit without push, note workflow run IDs) and pauses. Codex: a short message asks the agent to do the same. |
-| **Limit** | 100 % or a limit error | sessions are remembered with their reset time; the Mac is kept awake ([awake mode](#awake-mode-since-14)) |
-| **Reset** | reset time + 2 min | sessions in **night mode** are continued – but only after reading the terminal screen first. All others wait for you to type “continue” (one push per provider); Claude's built-in auto-continue is blocked for them |
+| **Stop** | 92 % | Claude (since 1.4, *soft stop*): new subagents/workflows are denied (“limit close – keep working yourself, running ones may finish”) plus **one** short note; Claude keeps working and handles the limit itself (grace note, workflows pause, built-in auto-continue). **Weekly** stop / weekly reserve and Codex: the **orderly stop** – one checkpoint request (update status/handoff file, WIP commit without push, note workflow run IDs), then pause. `[schwellen] claude_stopp_art = "geordnet"` brings back the orderly stop for Claude at the 5-hour stop. |
+| **Limit** | 100 % or a limit error | sessions are remembered with their reset time; the Mac is kept awake while night mode is on ([awake mode](#awake-mode-since-14)) |
+| **Reset** | reset time + 2 min | Claude continues by itself (built-in auto-continue, **never blocked** since 1.4). In **night mode** the watchdog steps in where that does not work (after the Mac slept > 30 min, more than 2 cycles, Remote Control, weekly reset > 24 h away) and continues Codex – always after reading the terminal screen first. Without night mode it does not intervene: stopped sessions and Codex wait for you to type “continue” (one push per provider) |
 | **Weekly reserve** | above 80 % weekly use | no automatic continuation at all (neither by the watchdog nor by Claude's built-in one) |
 
 ### Night mode (since 1.1)
 
-The stop always runs for every session, but **continuing after the reset is opt-in**: only sessions in night mode
-are continued automatically. Night mode lasts until the next report time (default 08:00) and then switches itself off.
+**Native first (since 1.4):** Claude's built-in auto-continue always runs; night mode no longer controls it. Night
+mode only decides whether the **watchdog itself** intervenes: it steps in when Claude's own continuation does not
+work (it gives it a grace period first), continues Codex and keeps the Mac awake. Without night mode the watchdog
+never types or restarts anything after a reset. Night mode lasts until the next report time (default 08:00) and
+then switches itself off.
 
 | How | |
 |---|---|
@@ -112,8 +125,8 @@ flowchart LR
   display (see below), Orca, the Claude status line chain and Codex's session files, computes the phase, sends notifications, stops Codex in an orderly way and continues sessions
   after the reset. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Claude Code hooks** (`hooks/claude_hook.py`, added to `~/.claude/settings.json` next to your other hooks):
-  map sessions to Orca terminals, deny new subagents in the stop phase, give the checkpoint request, record limit
-  errors and Claude's `quota_auto_resume_*` notifications. Since 1.3 they act in Orca terminals and in normal
+  map sessions to Orca terminals, deny new subagents in the stop phase, give the short note or (orderly stop) the
+  checkpoint request, optionally a context note, record limit errors and Claude's `quota_auto_resume_*` notifications. Since 1.3 they act in Orca terminals and in normal
   terminals (`[allgemein] nur_orca = true` restores the Orca-only behaviour) and go completely passive when the
   watchdog is paused or not running.
 - **Status line chain** (`hooks/statusline.py`, since 1.3): gives Claude usage without Orca, see below.
@@ -129,7 +142,7 @@ window**; it only uses official ways (Claude's hooks and built-in auto-continue,
 |---|---|---|---|
 | **Claude Code** in an **Orca** terminal | ✅ | ✅ hooks | ✅ with night mode (screen check first) |
 | **Codex CLI** in an **Orca** terminal | ✅ | ✅ short message | ✅ with night mode (screen check first) |
-| **Claude Code** in a normal terminal (Terminal.app, iTerm, IDE terminals) | ✅ | ✅ hooks (tested live) | only Claude's built-in auto-continue at the hard limit, and only with night mode; otherwise a push with a command to copy (`claude --resume <id>`) |
+| **Claude Code** in a normal terminal (Terminal.app, iTerm, IDE terminals) | ✅ | ✅ hooks (tested live) | Claude's built-in auto-continue at the hard limit (always); if it does not continue, a push with a command to copy (`claude --resume <id>`) |
 | **Codex CLI** in a normal terminal | ✅ | ❌ | push only (`codex resume <id>`); experimental, untested: `[fortsetzen] codex_queue = true` sends the stop message and the continuation via `codex queue` |
 | **Claude Desktop** | ✅ | probably like a normal terminal (hooks), not confirmed | probably like a normal terminal, not confirmed |
 | **Codex app** | ✅ display/warning only | ❌ | ❌ |
@@ -150,8 +163,8 @@ Claude Desktop and the Codex app are **not** continued by the watchdog after a r
   clicks or keystrokes (AppleScript / accessibility), which could just as well hit a purchase button in a limit
   dialog. That is exactly what this tool never does.
 - **Claude already has its own way.** Claude Code sessions (also the ones inside Claude Desktop, as far as the
-  hooks run there) have Claude's built-in *auto-continue at usage limit*. With night mode the watchdog lets it run,
-  without night mode it blocks it – so the desktop app still continues by itself at the hard limit, officially.
+  hooks run there) have Claude's built-in *auto-continue at usage limit*. Since 1.4 the watchdog never blocks it
+  (only the weekly reserve does), so the desktop app continues by itself at the hard limit, officially.
 - **The Codex app has nothing comparable.** It runs its own app server without hooks or `codex queue`, so the
   watchdog can only show and warn. Continue it by hand, or run long Codex jobs in an Orca terminal.
 
@@ -195,6 +208,24 @@ same exit code). The original is saved in `state/statusline-original.json`; `uni
 the status line both deliver data, the fresher one wins. If Orca or another tool later replaces the status line,
 `status` and the app show a hint and usage falls back to Orca – run `./install.sh` again to restore the chain.
 
+Since 1.4 the chain also stores the **context window** use of every Claude session (numbers only, in
+`state/kontext/`) and prints **one extra line** below your status line: model · context bar with percent and tokens
+· 5-hour use with reset time · week · ☾ in night mode. Your status line still runs first and unchanged. The line
+needs no network (well below 100 ms), uses ANSI colours (green / yellow from the warning / red from the critical or
+stop threshold), shrinks on narrow terminals (`COLUMNS`) and leaves out whatever is unknown. If anything goes wrong
+only your own status line is shown. Switch it off with `[statusline] anzeigen = false`.
+
+### Context per session (since 1.4)
+
+For every session the watchdog tracks how full the context window is (tokens in the context / window of the
+model): for Claude from the status line input (`context_window`), otherwise from the last entry in the transcript;
+for Codex from the `token_count` events in its session file. Percentages are raw (like Claude's `/context`), 1M
+models are recognised. From `[kontext] warnung` (70 %) and `kritisch` (85 %) you get **one** push + banner per session
+and level (again after a compaction). With `[kontext] hinweis_an_sitzung = true` Claude also gets one short note per
+level (“context at 72 % – prepare a handoff/compaction”). `status`, `status --json` (`kontext` per session,
+`kontext_schwellen`) and the app show it; change the levels with `thresholds set kontext_warnung=70
+kontext_kritisch=85` or in the app. Idle sessions older than 12 hours (`[anzeige] ruht_stunden`) are no longer listed.
+
 ## Awake mode (since 1.4)
 
 A continuation at 7:30 is useless if the Mac sleeps or locks. Awake mode (it replaces separate “stay awake” scripts)
@@ -233,10 +264,11 @@ terminals and never operates limit or purchase menus.
   with the 5-hour value large and the week below, bars with the warning/stop marks, reset times and the data
   source with its age; the sessions in a compact list (project, location, coloured state chip, night-mode moon);
   a row of quick switches with clear labels (**Night**, **Awake**, **Pause**); settings, thresholds and notes
-  collapsed until you need them. Light and dark mode.
+  collapsed until you need them. Light and dark mode. Since 1.4 each session also shows its model and a slim
+  context bar with the warning/critical marks.
 - **What it can do:** pause for 30 min / 2 h / until you resume; night mode for all sessions or per session;
   awake mode on/off (the password dialog comes from `waechter.py`, the app never sees the password); change the
-  five thresholds (written to `config.local.toml`); show the report; open the log.
+  thresholds including the context levels (written to `config.local.toml`); show the report; open the log.
 - **Uninstall:** `./uninstall.sh` also unloads the app's LaunchAgent and moves the app and its plist to
   `~/.limit-waechter/backups/` (nothing is deleted).
 - Build by hand: `app/build.sh [--ausgabe <dir>] [--projekt <path>]`; self-test without GUI:
@@ -312,10 +344,10 @@ is safe.
 | Command | |
 |---|---|
 | `./waechter.py status` | usage, phase, waiting or blocked sessions (`--all` for all sessions) |
-| `./waechter.py night on [session\|all]` / `night off` / `night` | night mode: continue these sessions automatically after the reset (until 08:00) |
+| `./waechter.py night on [session\|all]` / `night off` / `night` | night mode: the watchdog steps in after the reset where Claude's own auto-continue fails, continues Codex, keeps the Mac awake (until 08:00) |
 | `./waechter.py pause` / `pause 2h` / `pause off` | pause all interventions (Claude's built-in auto-continue keeps working) |
 | `./waechter.py awake on` / `awake off` / `awake status` | awake mode: keep the Mac awake, screen lock off (password dialog; German: `wach an\|aus`) |
-| `./waechter.py thresholds` / `thresholds set warn=80 stop=92 …` | show or change the thresholds (`warn`, `stop`, `weekly_warn`, `weekly_stop`, `weekly_reserve`; written to `config.local.toml`; `--json`; German: `schwellen setzen warnung=…`) |
+| `./waechter.py thresholds` / `thresholds set warn=80 stop=92 …` | show or change the thresholds (`warn`, `stop`, `weekly_warn`, `weekly_stop`, `weekly_reserve`, `kontext_warnung`, `kontext_kritisch`; written to `config.local.toml`; `--json`; German: `schwellen setzen warnung=…`) |
 | `./waechter.py report` | what happened in the last 24 h |
 | `./waechter.py simulate cycle` | full dry run with sample data: warning → stop → limit → continue → morning report |
 | `./waechter.py simulate stop` | what would happen *now* at 93 % (real terminals are only read) |
@@ -333,7 +365,12 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 |---|---|---|
 | `schwellen.warnung` / `stopp` | 80 / 92 | thresholds for the 5-hour window (`woche_*` for the weekly window) |
 | `schwellen.wochen_reserve` | 20 | no automatic continuation above 100 − 20 = 80 % weekly use |
-| `fortsetzen.nur_mit_nachtmodus` | `true` | only sessions in night mode are continued (and may use Claude's built-in auto-continue); `false` = 1.0 behaviour |
+| `schwellen.claude_stopp_art` | `"sanft"` | Claude at the 5-hour stop: `"sanft"` = only no new subagents/workflows + one note; `"geordnet"` = checkpoint request and pause (weekly stop/reserve are always orderly) |
+| `fortsetzen.nur_mit_nachtmodus` | `true` | the watchdog itself continues only sessions in night mode (Claude's built-in auto-continue always runs); `false` = 1.0 behaviour |
+| `kontext.warnung` / `kritisch` | 70 / 85 | context window levels: push + banner once per session and level (`kontext.melden`), colours in the status line |
+| `kontext.hinweis_an_sitzung` | `false` | `true` = Claude also gets one short note per level |
+| `statusline.anzeigen` | `true` | extra line below your status line in Claude Code |
+| `anzeige.ruht_stunden` | 12 | idle sessions are only listed if seen within this many hours |
 | `fortsetzen.max_pro_fenster` | 2 | automatic continuations per session and window |
 | `fortsetzen.claude_limit_resume` | `"waechter"` | set to `"orca"` if Orca's own rate-limit watcher continues Claude at the limit |
 | `fortsetzen.claude_modus` | `"auto"` | permission mode for sessions restarted with `--resume` |
@@ -350,8 +387,8 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
   never operated by keystroke. If Codex credits or reset credits go down, you get a notification.
 - **Reads before it types.** Every send is preceded by a screen check (menus, countdowns, purchase hints,
   text already in the input line, workflow views where letters act as shortcuts → nothing is sent).
-- **Built-in first.** Claude's own auto-continue gets a head start; the watchdog never sends a second
-  “continue” into a session that is already working.
+- **Built-in first.** Claude's own auto-continue is never blocked (except by the weekly reserve) and gets a head
+  start; the watchdog never sends a second “continue” into a session that is already working.
 - **Only agent terminals.** Only Orca terminals whose agent identity is `claude` or `codex` are typed into.
   Outside Orca nothing is typed, no screen is read and no window is opened.
 - **Fails passive.** If the watchdog is not running for 10 minutes, the hooks stop intervening; a crashing
@@ -392,7 +429,7 @@ All options are in [`config.toml`](config.toml) with comments. The most importan
 ## Development
 
 ```sh
-/usr/bin/python3 -m unittest discover -s tests  # 290+ tests, no network, no model calls
+/usr/bin/python3 -m unittest discover -s tests  # 330+ tests, no network, no model calls
 ./waechter.py simulate cycle                     # end-to-end dry run with a fake Orca
 ```
 
@@ -403,12 +440,13 @@ available in English and German ([`lw/sprache.py`](lw/sprache.py)). Coding agent
 ```
 waechter.py            CLI entry point
 hooks/claude_hook.py   Claude Code hook
-hooks/statusline.py    status line chain (stores usage, runs the original status line)
+hooks/statusline.py    status line chain (stores usage and context, runs the original status line, adds one line)
 lw/orte.py             where a session runs (orca/terminal/desktop) and what the watchdog can do there
 lw/tick.py             one run: data → phases → notifications → actions
 lw/quellen.py          data sources (Orca, Codex rollouts, Claude transcripts, pmset)
 lw/nutzung.py          official usage display (read-only request, token never stored)
 lw/aktivitaet.py       evidence that a session really works (transcript / rollout)
+lw/kontextfenster.py   context window per session (status line, transcript, rollout)
 lw/wach.py             awake mode (Amphetamine / caffeinate, screen lock)
 lw/bildschirm.py       screen check before every send
 lw/fortsetzen.py       continuing after the reset

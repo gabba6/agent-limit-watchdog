@@ -1,0 +1,6 @@
+{"timestamp": "2026-09-26T05:00:00.000Z", "type": "session_meta", "payload": {"id": "01a0beef-0000-7000-8000-00000000c0de", "cwd": "/tmp/api", "originator": "codex-tui"}}
+{"timestamp": "2026-09-26T05:00:01.000Z", "type": "turn_context", "payload": {"model": "gpt-5.5-codex", "cwd": "/tmp/api"}}
+{"timestamp": "2026-09-26T05:00:05.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": null, "rate_limits": {}}}
+{"timestamp": "2026-09-26T05:01:00.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {"input_tokens": 900000, "cached_input_tokens": 800000, "output_tokens": 20000, "total_tokens": 920000}, "last_token_usage": {"input_tokens": 150000, "cached_input_tokens": 140000, "output_tokens": 2000, "reasoning_output_tokens": 500, "total_tokens": 152000}, "model_context_window": 272000}, "rate_limits": {}}}
+{"timestamp": "2026-09-26T05:01:30.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": null, "rate_limits": {}}}
+{"timestamp": "2026-09-26T05:01:31.000Z", "type": "event_msg", "payload": {"type": "agent_message", "message": "fertig"}}

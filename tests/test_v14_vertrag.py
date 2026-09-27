@@ -15,6 +15,9 @@ LAGEN = {"arbeitet", "ruht", "sichert", "wartet", "pruefung", "weiter_noetig", "
 FARBEN = {"gruen", "grau", "gelb", "blau", "orange", "rot"}
 QUELLEN = {"offiziell", "orca", "statusline", "rollout", None}
 WACH = {"an", "art", "modus", "bis", "sperre", "zugeklappt_ok", "netzteil", "amphetamine", "text"}
+KONTEXT = {"prozent", "tokens", "fenster", "modell", "stufe", "stand", "quelle"}
+KONTEXT_STUFEN = {"ok", "warnung", "kritisch"}
+KONTEXT_QUELLEN = {"statusline", "transcript", "rollout"}
 
 
 class VertragTest(TempHome):
@@ -79,6 +82,21 @@ class VertragTest(TempHome):
             self.assertLessEqual({"nacht_bis", "nacht_eigen", "nacht_global"}, set(s))
             wirksam = [w for w in (s["nacht_eigen"], s["nacht_global"]) if w]
             self.assertEqual(s["nacht_bis"], max(wirksam) if wirksam else None)
+            # v1.4 N4: Kontext je Sitzung (verbindlicher Vertrag für die App)
+            self.assertIn("kontext", s)
+            kx = s["kontext"]
+            if kx is not None:
+                self.assertEqual(set(kx), KONTEXT)
+                self.assertIn(kx["stufe"], KONTEXT_STUFEN)
+                self.assertIn(kx["quelle"], KONTEXT_QUELLEN)
+                self.assertIsInstance(kx["prozent"], (int, float))
+                self.assertIsInstance(kx["tokens"], int)
+                self.assertIsInstance(kx["fenster"], int)
+                self.assertGreater(kx["fenster"], 0)
+                self.assertTrue(kx["modell"] is None or isinstance(kx["modell"], str))
+                self.assertIsInstance(kx["stand"], (int, float))
+        self.assertEqual(set(d["kontext_schwellen"]), {"warnung", "kritisch"})
+        self.assertLess(d["kontext_schwellen"]["warnung"], d["kontext_schwellen"]["kritisch"])
 
     def test_status_json_de_und_en(self):
         for wert in ("de", "en"):
@@ -107,9 +125,17 @@ class VertragTest(TempHome):
         self.assertIsNotNone(eigen["nacht_eigen"])
 
     def test_app_fixture_erfuellt_vertrag(self):
-        d = lies_fixture_json(os.path.join("app", "status.json"))
-        self.assertEqual(d["version"], VERSION)
-        self.pruefe_status(d)
+        for name in ("status.json", "status_en.json"):
+            with self.subTest(fixture=name):
+                d = lies_fixture_json(os.path.join("app", name))
+                self.assertEqual(d["version"], VERSION)
+                self.pruefe_status(d)
+                self.assertTrue(any(s["kontext"] for s in d["sitzungen"]))
+                self.assertTrue(any(s["kontext"] is None for s in d["sitzungen"]))
+        en = lies_fixture_json(os.path.join("app", "status_en.json"))
+        self.assertEqual(en["sprache"], "en")
+        self.assertNotRegex(json.dumps(en, ensure_ascii=False), "[äöüÄÖÜß]", "englische Demo ohne deutsche Texte")
+        self.assertEqual({s["kontext"]["stufe"] for s in en["sitzungen"] if s["kontext"]}, KONTEXT_STUFEN)
 
     def test_wach_json_fuer_die_app(self):
         code, out = self.cli("wach", "status", "--json")

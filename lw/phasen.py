@@ -9,6 +9,13 @@ def fenster_id(anbieter, art, reset):
     return f"{anbieter}-{art}-{int(round((reset or 0) / 600.0))}"
 
 
+def claude_sanft(stopp_art, p):
+    """v1.4 N2: sanfter Stopp für Claude? Nur am 5h-Stopp ohne Wochenreserve und mit claude_stopp_art "sanft";
+    Wochen-Stopp und Wochenreserve bleiben immer ein geordneter Stopp mit Sicherungsauftrag."""
+    return (stopp_art or "sanft") != "geordnet" and (p or {}).get("art") != "woche" \
+        and not (p or {}).get("reserve_erreicht")
+
+
 def waehle_quelle(*kandidaten, now=None, max_alter_s=None):
     """Von mehreren Nutzungsständen den frischesten nehmen.
 

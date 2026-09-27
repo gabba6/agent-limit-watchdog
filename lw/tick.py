@@ -6,6 +6,7 @@ from . import bericht, codex, fortsetzen, nacht, orte, phasen, quellen, register
 from .sprache import t
 from .orca import OrcaFehler
 from . import nutzung  # v1.4 A
+from . import kontextfenster  # v1.4 Kontext
 
 ZUSTAND = ("state", "zustand.json")
 CURRENT = ("state", "current.json")
@@ -178,6 +179,13 @@ def current_schreiben(k, ph, pausiert, now):
         "sprache": k["allgemein"]["sprache"],
         "nur_orca": bool(k["allgemein"].get("nur_orca")),
         "name": k["allgemein"]["name"],
+        # v1.4: sanfter Stopp, Kontext-Schwellen und Terminal-Zeile für Hook und Statusline
+        "claude_stopp_art": str(k["schwellen"].get("claude_stopp_art", "sanft")),
+        "schwellen": {n: k["schwellen"][n] for n in ("warnung", "stopp", "woche_warnung", "woche_stopp")},
+        "kontext": {"warnung": k["kontext"]["warnung"], "kritisch": k["kontext"]["kritisch"],
+                    "hinweis": bool(k["kontext"]["hinweis_an_sitzung"]),
+                    "standard_fenster": k["kontext"]["standard_fenster"]},
+        "statusline_anzeigen": bool(k["statusline"]["anzeigen"]),
         "claude": ph["claude"],
         "codex": ph["codex"],
     })
@@ -238,7 +246,8 @@ def _meldungen_phasen(ctx, ph, zustand, sitzungen, mac):
                 remote = _remote_hinweis(mac) if p["phase"] in ("stopp", "limit") and auto else ""
                 if remote and _nacht(ctx.now):
                     ctx.melder.bereits_markieren(_nacht_schluessel(ctx.now))
-                ctx.melder.senden(texte.push_phase(anb, p, auto, remote), prio=PRIO[p["phase"]],
+                sanft = anb == "claude" and phasen.claude_sanft(ctx.k["schwellen"].get("claude_stopp_art"), p)
+                ctx.melder.senden(texte.push_phase(anb, p, auto, remote, sanft), prio=PRIO[p["phase"]],
                                   tags=TAGS[p["phase"]], schluessel=schluessel)
         if p["reserve_erreicht"] and p["resetw"]:
             ctx.melder.senden(t("push_reserve", n=texte.NAME[anb], pctw=sprache.prozent(p["pctw"]),
@@ -354,6 +363,53 @@ def _nachholen(k, sitzungen, now):
     return geaendert
 
 
+def nativ_laeuft(k, s, now):
+    """v1.4 N3: Wartet eine Claude-Sitzung am Limit auf Claudes eingebautes Fortsetzen (noch innerhalb der
+    Karenz: Reset + 3 × claude_eingebaut_karenz_minuten)? Dann greift der Wächter ohne Nachtmodus nicht ein."""
+    if s.get("anbieter") != "claude" or s.get("status") not in ("limit", "eingebaut_wartet"):
+        return False
+    return now < (s.get("reset") or 0) + 3 * k["fortsetzen"]["claude_eingebaut_karenz_minuten"] * 60
+
+
+KX_NR = {"ok": 0, "warnung": 1, "kritisch": 2}
+KX_MAX_ALTER_S = 3600
+
+
+def _kontext_melden(ctx, zustand, rollouts):
+    """v1.4 N4: Kontextfüllstand je Sitzung; einmal je Sitzung und Stufe Push + Banner. Fällt der Stand wieder
+    unter die Warnschwelle (Kompaktierung, /clear), darf die Meldung erneut kommen."""
+    k, now = ctx.k, ctx.now
+    alt = zustand.get("kontext_gemeldet") or {}
+    neu = {}
+    index = codex.id_index(rollouts or [])
+    grenze = k["anzeige"]["ruht_stunden"] * 3600
+    for s in register.alle():
+        if s.get("status") == "beendet" or now - (s.get("zuletzt") or 0) > max(grenze, 3600):
+            continue
+        schl = f"{s.get('anbieter')}-{s.get('id')}"
+        kx = kontextfenster.ermitteln(s, k, index)
+        if not kx or now - (kx.get("stand") or 0) > KX_MAX_ALTER_S:
+            if schl in alt:
+                neu[schl] = alt[schl]
+            continue
+        nr = KX_NR.get(kx["stufe"], 0)
+        gemeldet = int(alt.get(schl) or 0)
+        if nr > gemeldet and k["kontext"]["melden"]:
+            n = texte.NAME.get(s.get("anbieter"), "?")
+            ctx.melder.senden(t("kx_push_" + kx["stufe"], n=n, id=str(s.get("id"))[:8],
+                                pct=sprache.prozent(kx["prozent"]), tokens=kontextfenster.tokens_text(kx["tokens"]),
+                                fenster=kontextfenster.tokens_text(kx["fenster"])),
+                          prio=4 if nr == 2 else 3, tags=["brain"])
+            util.ereignis("kontext", anbieter=s.get("anbieter"), sitzung=s.get("id"), stufe=kx["stufe"],
+                          prozent=kx["prozent"])
+            gemeldet = nr
+        elif nr < gemeldet and nr == 0:
+            gemeldet = 0
+        if gemeldet:
+            neu[schl] = gemeldet
+    zustand["kontext_gemeldet"] = neu
+
+
 def _wird_fortgesetzt(k, s, now):
     """Würde diese wartende Sitzung beim Reset automatisch fortgesetzt (für Wachhalten/Remote-Hinweis)?"""
     if orte.ort(s) != "orca" and orte.faehigkeiten(s, k)["fortsetzen"] != "ja":
@@ -441,6 +497,8 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
                 if _nur_nacht(k) and s["fortsetzen_ab"] <= now \
                         and ph[s["anbieter"]]["phase"] not in ("stopp", "limit") and not nacht.aktiv(s, now) \
                         and not (ph[s["anbieter"]].get("reserve_erreicht") or s.get("reserve_bei_halt")):
+                    if nativ_laeuft(k, s, now):
+                        continue             # v1.4 N3: Claudes eingebautes Fortsetzen hat Vorrang, kein Eingriff
                     _auf_weiter_setzen(s)
                     continue
                 ok, grund = fortsetzen.faellig(s, ph[s["anbieter"]], k, now)
@@ -463,6 +521,10 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
                     fortsetzen.pruefen(ctx, s)
 
         _bericht(ctx, zustand)
+    try:
+        _kontext_melden(ctx, zustand, daten.get("rollouts"))
+    except (OSError, ValueError, KeyError, TypeError) as e:     # Kontext ist Zusatz: nie den Tick stören
+        util.log(f"Kontext: {type(e).__name__}: {e}")
     _wach_halten(ctx, mac, pausiert)
 
     zustand["letzter_tick"] = now

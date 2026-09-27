@@ -10,14 +10,15 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 | Part | File | Runs | Job |
 |---|---|---|---|
 | Tick | `waechter.py tick` → `lw/tick.py` | LaunchAgent, every 60 s (~0.4 s) | collect usage, compute phases, notify, stop Codex, continue sessions, keep the Mac awake, morning report |
-| Claude hook | `hooks/claude_hook.py` | Claude Code, on hook events | register session with its location (and Orca terminal, if any), deny new subagents, checkpoint request, record limit errors |
-| Status line chain | `hooks/statusline.py` | Claude Code, as `statusLine` command | store Claude's `rate_limits` in `state/statusline.json` (throttled, atomic), then run the original status line unchanged |
+| Claude hook | `hooks/claude_hook.py` | Claude Code, on hook events | register session with its location (and Orca terminal, if any), deny new subagents, soft-stop note or checkpoint request, optional context note, record limit errors |
+| Status line chain | `hooks/statusline.py` | Claude Code, as `statusLine` command | store Claude's `rate_limits` in `state/statusline.json` and the session's context use in `state/kontext/` (throttled, atomic), run the original status line unchanged, then print one own line (1.4) |
+| Context window (1.4) | `lw/kontextfenster.py` | status line, tick, hook, CLI | context use per session from the status line input, the Claude transcript or the Codex rollout; levels and pushes |
 | Locations | `lw/orte.py` | tick, hook, CLI | location of a session (`orca` / `terminal` / `desktop`) and what the watchdog can do there (`faehigkeiten`, computed, never stored) |
 | Night mode | `lw/nacht.py` | tick, hook, CLI | who is continued after the reset: `nacht_bis` per session, `state/nacht.json` for all; ends at the report time |
 | Official usage (1.4) | `lw/nutzung.py` | tick (throttled) | read-only request to the providers' usage display, cached without token in `state/offiziell.json` |
 | Activity evidence (1.4) | `lw/aktivitaet.py` | tick | did a session really work since a given time? (Claude transcript / Codex rollout, never Orca's state) |
 | Awake mode (1.4) | `lw/wach.py` | tick, CLI, `uninstall.sh` | automatic keep-awake (Amphetamine session or `caffeinate`), manual `wach an\|aus` with screen lock |
-| State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks, plus `nur_nacht` / `nacht_ende`), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `state/offiziell.json` (official usage cache, no token), `state/wach.json` (own `caffeinate` / Amphetamine session), `state/wach-modus.json` (manual awake mode and the previous lock delay, never a password), `log/`, `berichte/` (reports), `backups/` |
+| State | `~/.limit-waechter/` | – | `state/current.json` (phases for the hooks, plus `nur_nacht` / `nacht_ende`), `state/sitzungen/<provider>-<id>.json` (one file per session, so parallel hooks never overwrite each other), `state/offiziell.json` (official usage cache, no token), `state/kontext/<provider>-<id>.json` (context numbers per session, short history, no content), `state/wach.json` (own `caffeinate` / Amphetamine session), `state/wach-modus.json` (manual awake mode and the previous lock delay, never a password), `log/`, `berichte/` (reports), `backups/` |
 | CLI | `lw/cli.py` | you, the app | `status`, `night`, `awake`, `pause`, `thresholds`, `report`, `simulate`, `ntfy-setup`, … |
 | Menu bar app | `app/` (SwiftUI) | own LaunchAgent, at login | shows usage, phases, sessions; pause, night mode, awake mode, thresholds, report – only via `waechter.py` |
 
@@ -32,6 +33,9 @@ library; the package is called `lw` (from the original German name *Limit-Wächt
 | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex `rate_limits` snapshots, `task_complete` with `usage_limit_exceeded`, `session_meta.originator` | fresher than Orca for Codex; the reset time is matched against the “try again at …” message; outside Orca also the source of Codex sessions |
 | `claude agents --json` | running Claude sessions (pid, cwd, session id, idle/busy) | before a resume, to avoid starting a session that already runs elsewhere |
 | Claude transcript (`quotaLimits`) | exact `resetsAt` and window type after a limit error | read by the `StopFailure` hook |
+| Status line input `context_window` (1.4) | `current_usage` {`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`}, `used_percentage`, `context_window_size`, `model` | read tolerantly; both null (new session, right after `/compact`) → the stored value is kept unless the transcript shows a `compact_boundary` (= 0) |
+| Claude transcript `message.usage` (1.4) | context tokens of the last main-thread `assistant` entry (sidechains and API error entries skipped) | fallback when the status line value is missing or more than 5 min older than the transcript; window from the stored value, `[1m]` in the model id or `[kontext] standard_fenster` (more than 200k tokens → 1M) |
+| Codex rollout `event_msg`/`token_count` (1.4) | `info.last_token_usage.total_tokens`, `info.model_context_window`; model from `turn_context` | the last entry with `info` counts (same formula as Codex itself, without its 12k baseline) |
 | `orca terminal list` / `worktree ps` / `terminal read --screen` | terminals, agent state, the rendered screen | handles are never cached; looked up every tick |
 | Orca's `agent-hooks/last-status.json` | pane → provider session id | maps Codex terminals to their thread |
 | `pmset`, `ioreg` | power source, sleep settings, lid behaviour | for the night warning |
@@ -85,10 +89,10 @@ continuation.
 
 | Event | Matcher | Behaviour |
 |---|---|---|
-| `SessionStart`, `UserPromptSubmit` | – | register session ↔ `ORCA_TERMINAL_HANDLE` / pane / worktree; recognise the watchdog's own continuation prompt and Claude's built-in one; with the weekly reserve reached, block the built-in continuation prompt. `UserPromptSubmit` also: `#night`/`#nacht [on\|off\|all]` switches night mode (`decision: block`, never reaches the model, works even while paused); without night mode (and `nur_mit_nachtmodus`) the built-in continuation prompt is blocked and the session set to `wartet_auf_weiter` |
-| `PreToolUse` | `Agent\|Task\|Workflow` | in *Stop*/*Limit*: `permissionDecision: deny` with a short reason (also inside subagents) |
-| `PostToolUse` | `*` | in *Stop*, once per session and window: `additionalContext` with the stop request |
-| `Stop` | – | in *Stop*, once per session and window: `decision: block` with the checkpoint request (`stop_hook_active` respected); the next stop marks the session as stopped |
+| `SessionStart`, `UserPromptSubmit` | – | register session ↔ `ORCA_TERMINAL_HANDLE` / pane / worktree; recognise the watchdog's own continuation prompt and Claude's built-in one; **only** with the weekly reserve reached (and `reserve_sperrt_eingebaute_fortsetzung`) block the built-in continuation prompt – since 1.4 never because of night mode (“native first”). `UserPromptSubmit` also: `#night`/`#nacht [on\|off\|all]` switches night mode (`decision: block`, never reaches the model, works even while paused); in *Stop*/*Limit* a note (soft stop: shared with `PostToolUse`, once per window) |
+| `PreToolUse` | `Agent\|Task\|Workflow` | in *Stop*/*Limit*: `permissionDecision: deny` with a short reason (also inside subagents); soft stop: “limit close – do not start new subagents/workflows, keep working yourself; running ones may finish” |
+| `PostToolUse` | `*` | in *Stop*, once per session and window: `additionalContext` (soft: short note; orderly: stop request); optionally the context note |
+| `Stop` | – | **orderly stop only** (weekly stop, weekly reserve, or `claude_stopp_art = "geordnet"`): once per session and window `decision: block` with the checkpoint request (`stop_hook_active` respected); the next stop marks the session as stopped. Soft stop: no block, the session stays `aktiv` |
 | `StopFailure` | `rate_limit` | plan limit (not a server throttle): remember the session with its reset time from `quotaLimits` |
 | `Notification` | `quota_auto_resume_*`, `permission_prompt` | track Claude's built-in auto-continue (fired / stale / disabled) |
 | `PermissionDenied`, `SessionEnd` | – | morning report / mark ended sessions (never auto-continued) |
@@ -100,6 +104,14 @@ anything else → `terminal`. Outside Orca, stale Orca fields (`terminal`, `pane
 removed so an old handle is never addressed. The checkpoint request says whether the session will be continued
 automatically (outside Orca: no).
 
+Soft or orderly (1.4): `phasen.claude_sanft()` – soft unless `[schwellen] claude_stopp_art = "geordnet"`, the phase
+comes from the **weekly** window, or the weekly reserve is reached. At the hard limit Claude then handles itself
+(grace note, workflows pause, built-in auto-continue).
+
+Context note (1.4, `[kontext] hinweis_an_sitzung`, default off): on `PostToolUse`/`UserPromptSubmit` the hook reads the
+stored context value and adds one `additionalContext` per level (“context at 72 % – prepare a handoff/compaction”);
+the level is kept in the session file (`kontext_hinweis`) and reset when the value drops below the warning level.
+
 Guards: with `nur_orca = true` (read from `current.json`) the hook acts only when `ORCA_TERMINAL_HANDLE` is set
 (1.2 behaviour); never while paused, never if `current.json` is
 older than 10 minutes, never after the window's reset time. Any exception makes it print nothing (Claude
@@ -107,8 +119,12 @@ continues normally). Subagent calls (`agent_id` present) are ignored except for 
 
 ## Continuing after the reset
 
-For every waiting session whose `reset + 2 min` has passed: if `[fortsetzen] nur_mit_nachtmodus` is on (default)
-and the session is **not in night mode at that moment** (expired = off), it becomes `wartet_auf_weiter`: nothing is
+Native first (1.4): Claude's built-in auto-continue is never blocked (only the weekly reserve blocks it). Night mode
+only governs the watchdog's own interventions. For every waiting session whose `reset + 2 min` has passed: if
+`[fortsetzen] nur_mit_nachtmodus` is on (default) and the session is **not in night mode at that moment** (expired =
+off), a Claude session at the limit (`limit` / `eingebaut_wartet`) is left alone until `reset + 3 ×
+claude_eingebaut_karenz_minuten` (Claude continues by itself; `status`/the app say so); after that, and for all other
+sessions (orderly-stopped Claude, Codex), it becomes `wartet_auf_weiter`: nothing is
 sent, the screen is not read, and one push per provider collects all such sessions (held back up to 3 minutes so
 sessions resetting together land in one message). A Codex thread leaves that status when its rollout shows new
 activity; a Claude session on its next normal prompt. If night mode is switched on later, sessions that have
@@ -135,8 +151,8 @@ get 5 more minutes so Claude's built-in auto-continue can go first):
    re-checks → blocked + notification).
 
 **Outside Orca** (location `terminal`/`desktop`) the watchdog never types, never reads a screen, never opens a
-terminal or window (no tmux, no AppleScript). Claude: only Claude's built-in auto-continue (allowed with night
-mode, blocked without); a due session that is still waiting after its grace period becomes `wartet_auf_weiter` and
+terminal or window (no tmux, no AppleScript). Claude: only Claude's built-in auto-continue (always allowed since 1.4,
+except with the weekly reserve); a due session that is still waiting after its grace period becomes `wartet_auf_weiter` and
 gets a push with a command to copy (`claude --resume <id>`), never a restart. Codex: push with `codex resume <id>`,
 unless `codex_queue` is on (below).
 
@@ -206,15 +222,21 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
   `wach` {`an`, `art`: `amphetamine`|`caffeinate`|`aus`, `modus`: `manuell`|`automatisch`|`aus`, `bis`,
   `sperre`, `zugeklappt_ok`, `netzteil`, `amphetamine`, `text`}, per provider `quelle_text` and `woche_modell`,
   and per session `lage` / `lage_text` / `lage_farbe` (state chip) and `aktivitaet` {`letzte`, `quelle`}.
+  Since 1.4 (27.09.) also per session `kontext` – `{"prozent": 41.2, "tokens": 412000, "fenster": 1000000,
+  "modell": "Opus 5.5", "stufe": "ok"|"warnung"|"kritisch", "stand": <epoch>, "quelle":
+  "statusline"|"transcript"|"rollout"}` or `null` – and top-level `kontext_schwellen` {`warnung`, `kritisch`}; a Claude
+  session at the limit counts as `automatisch` (Claude continues by itself) with `lage_text` “Claude continues at … by
+  itself”; idle sessions (`lage` `ruht`) older than `[anzeige] ruht_stunden` (12) are left out.
   Older output without these keys still works (`tests/fixtures/app/status_v13.json`).
-  Example: `tests/fixtures/app/status.json`. The app decodes every field as optional and drops broken entries.
+  Examples: `tests/fixtures/app/status.json`, English demo data for screenshots `tests/fixtures/app/status_en.json`. The app decodes every field as optional and drops broken entries.
 - **Texts:** the hidden command `app-texte` returns `{"sprache", "texte"}` with all keys starting with `app_`,
   `phase_`, `z_` from `lw/sprache.py`, placeholders unreplaced; the app fills `{name}` itself and formats
   times by `sprache`. So all user-facing texts still live in one place.
 - **Thresholds:** `schwellen setzen` accepts integers 1..99 (reserve 0..50), checks the merged configuration
   with `konfig.pruefen()` and writes only `config.local.toml` via `konfig.lokal_setzen()` (keeps other lines and
   comments, atomic replace, keeps file mode, new file 0600). `--json` → `{"ok": true, "schwellen": {…}}` / exit 0 or
-  `{"ok": false, "fehler": […]}` / exit 2.
+  `{"ok": false, "fehler": […]}` / exit 2. Since 1.4 also `kontext_warnung` / `kontext_kritisch` (1..99, warning below
+  critical), written to `[kontext]`; `schwellen --json` returns them next to the five thresholds.
 - **Build:** `app/build.sh` runs `swift build -c release`, writes `Info.plist` (identifier `<label>.app`,
   `LSUIElement`, minimum macOS 14.0, version = `lw.VERSION`, `LWProjekt` = project path; overridable with
   `LIMIT_WAECHTER_PROJEKT`) and signs **ad hoc** (`codesign -s -`, verified with `--strict`) – no paid certificate.
@@ -231,8 +253,11 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
 ## Design decisions
 
 - **Built-in first:** Claude Code's auto-continue is official; the watchdog fills the gaps instead of replacing it.
-- **Continuing is opt-in (1.1):** stopping protects every session; continuing unattended is a decision per night,
-  so it needs night mode. Night mode is only a timestamp compare – no background job has to switch it off.
+  Since 1.4 it never blocks it (only the weekly reserve does), and at the 5-hour stop it only slows Claude down
+  (no new subagents/workflows) instead of forcing a checkpoint – Claude's own limit handling does the rest. The
+  orderly stop stays where nothing native helps: weekly limits, the weekly reserve and Codex.
+- **Continuing is opt-in (1.1):** continuing unattended by the watchdog is a decision per night, so it needs night
+  mode (since 1.4 this no longer affects Claude's built-in auto-continue). Night mode is only a timestamp compare – no background job has to switch it off.
 - **Unclear means stop:** any screen the classifier does not understand leads to “send nothing, notify”.
 - **Money is a hard line:** no code path selects menu options; only a continuation prompt or a single Enter is typed.
 - **Fail passive:** stale state disables the hooks; the tick catches its own errors and reports them once a day.
@@ -243,6 +268,9 @@ LimitWaechter.app ──Process(argv)──▶ /usr/bin/python3 <project>/waecht
 - **Orca optional, never type outside it (1.3):** without Orca there is no reliable way to read a screen, so the
   watchdog only uses official channels there: hooks, Claude's built-in auto-continue, optionally `codex queue`.
   What a session gets is computed in one place (`orte.faehigkeiten`) and the tick only does what it says.
+- **Own status line row (1.4):** the original status line always runs first, its output is passed on
+  unchanged and flushed at once; our line comes after it, is built from the same input without network or `git`,
+  and any error or timeout in our part only drops our line.
 - **Status line: only wrap, never replace (1.3):** the user's status line keeps running unchanged; the original is
   saved in `state/statusline-original.json` (0600, plus a copy in `backups/`) and restored by `uninstall.sh`. Our
   command is marked with `# limit-watchdog-statusline` and must **not** contain `agent-hooks/claude-statusline`:

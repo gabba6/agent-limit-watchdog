@@ -52,6 +52,21 @@ def deny_grund(p, bezug=None):
     return t("deny_grund", app=t("app"), stand=stand(p, bezug))
 
 
+def sanft_deny(p, bezug=None):
+    return t("sanft_deny", app=t("app"), stand=stand(p, bezug))
+
+
+def sanft_kontext(p, bezug=None):
+    return t("sanft_kontext", app=t("app"), stand=stand(p, bezug))
+
+
+def kontext_hinweis(kx):
+    """kx: {'prozent', 'tokens', 'fenster'} -> kurzer Hinweis an die Claude-Sitzung."""
+    from .kontextfenster import tokens_text
+    return t("kx_hinweis_sitzung", app=t("app"), pct=sprache.prozent(kx["prozent"]),
+             tokens=tokens_text(kx["tokens"]), fenster=tokens_text(kx["fenster"]))
+
+
 def prompt_hinweis(p, bezug=None):
     return t("prompt_hinweis", app=t("app"), stand=stand(p, bezug))
 
@@ -64,10 +79,6 @@ def codex_stopp(p, bezug=None, automatisch=True):
     return t("codex_kopf", app=t("app"), stand=stand(p, bezug)) + t("codex_kern") + _danach(p, automatisch)
 
 
-def weiter_block(bezug=None):
-    return t("weiter_block", app=t("app"), wer=sprache.wer())
-
-
 def nacht_antwort(art, bis=None, bezug=None):
     """Antwort auf '#nacht …' im Hook. art: "an" | "alle" | "aus"."""
     zeit = util.uhrzeit(bis, bezug)
@@ -77,13 +88,13 @@ def nacht_antwort(art, bis=None, bezug=None):
 
 # ---------------------------------------------------------------- Push-Texte (kurz, ohne Projektinhalte)
 
-def push_phase(anbieter, p, anzahl_wartend=0, remote_hinweis=""):
+def push_phase(anbieter, p, anzahl_wartend=0, remote_hinweis="", sanft=False):
     werte = {"n": NAME[anbieter], "art": art_text(p["art"]), "pct": sprache.prozent(p["pct"]),
              "reset": util.uhrzeit(p["reset"]), "hinweis": remote_hinweis}
     if p["phase"] == "warnung":
         return t("push_warnung", **werte)
     if p["phase"] == "stopp":
-        return t("push_stopp", **werte)
+        return t("push_stopp_sanft" if sanft else "push_stopp", **werte)
     if p["phase"] == "limit":
         warten = t("push_limit_warten", anzahl=anzahl_wartend) if anzahl_wartend else ""
         return t("push_limit", warten=warten, **werte)

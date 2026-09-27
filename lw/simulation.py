@@ -166,6 +166,9 @@ def zyklus(ausgabe=True):
         k["daten"]["codex_sessions"] = os.path.join(tmp, "codex-sessions")
         k["daten"]["orca_hook_status"] = os.path.join(tmp, "orca-last-status.json")
         k["wach"]["remote_modus_pruefen"] = True
+        # der Probelauf zeigt den geordneten Stopp mit eigener Fortsetzung (seit 1.4 nur noch bei Woche/Reserve
+        # oder claude_stopp_art = "geordnet"; der sanfte Standard hält Claude am 5h-Stopp nicht an)
+        k["schwellen"]["claude_stopp_art"] = "geordnet"
         tid = "01a0ffff-0000-7000-8000-00000000c0de"
         util.schreib_json(k["daten"]["orca_hook_status"], {"entries": {"p": {
             "paneKey": "tabX:leafX", "source": "codex", "providerSession": {"id": tid}}}})

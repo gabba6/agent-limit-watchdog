@@ -1,14 +1,16 @@
 # Bedienungsanleitung (Deutsch)
 
-Stand: Version 1.4 (offizielle Füllstände, verlässliches Fortsetzen, Wach-Modus, neue App). Die englische Beschreibung steht in der [README](../README.md).
+Stand: Version 1.4 (offizielle Füllstände, verlässliches Fortsetzen, Wach-Modus, neue App, „nativ zuerst“,
+Kontext je Sitzung, eigene Statusline-Zeile). Die englische Beschreibung steht in der [README](../README.md).
 
 ## Ganz einfach erklärt (hier anfangen)
 
 ### Die Idee
 
 Der Wächter passt auf, dass deine Claude- und Codex-Sitzungen nicht mitten in der Arbeit vom Nutzungslimit
-abgewürgt werden. Stell ihn dir wie einen Tankwart vor: Er warnt, bevor der Tank leer ist, lässt dich ordentlich
-rechts ranfahren und fährt nach dem Nachtanken wieder los, aber **nur, wenn du das erlaubt hast**.
+abgewürgt werden. Stell ihn dir wie einen Tankwart vor: Er warnt, bevor der Tank leer ist, sagt „jetzt keine
+Umwege mehr“ und lässt Claude selbst nachtanken und weiterfahren (Claude kann das von Haus aus). Nur wo das nicht
+klappt – und bei Codex – schiebt er selbst an, und zwar **nur, wenn du das erlaubt hast** (Nachtmodus).
 
 ### Was er von selbst macht, ohne dass du etwas drückst
 
@@ -18,28 +20,32 @@ Er schaut jede Minute, wie voll dein Limit ist (5-Stunden-Fenster und Woche):
 |---|---|
 | unter 80 % | nichts |
 | **80 %** | **Warnung**: Push aufs Handy und Banner am Mac, sonst nichts |
-| **92 %** | **Geordneter Stopp**: Jede Sitzung macht ihren Schritt fertig, sichert den Stand (Übergabedatei, WIP-Commit ohne Push) und hält an. Neue Subagents/Workflows werden verweigert. |
-| **Limit** | Die Sitzungen stehen schon, der Wächter wartet auf den Reset und hält den Mac wach. |
-| **Reset** | Jetzt entscheidet der Nachtmodus, ob es von selbst weitergeht (siehe unten). |
+| **92 %** | **Sanfter Stopp** (Claude, seit 1.4): Neue Subagents/Workflows werden verweigert („Limit nah – selbst weiterarbeiten, laufende dürfen fertig werden“), dazu einmal ein kurzer Hinweis. Claude arbeitet weiter und regelt das Limit selbst (Hinweis, Workflows pausieren, eigenes Weitermachen). **Geordneter Stopp** (Schritt fertig, Stand sichern, WIP-Commit ohne Push, anhalten) nur noch beim **Wochen**limit, bei der Wochenreserve und für Codex. |
+| **Limit** | Der Wächter merkt sich die Sitzungen mit Reset-Zeit. |
+| **Reset** | Claude macht von selbst weiter (eingebautes Auto-Continue). Der Nachtmodus entscheidet nur, ob der **Wächter** zusätzlich einspringt (siehe unten). |
 
-Warnung und Stopp laufen **immer, für alle Sitzungen**. Das musst du nie einschalten.
+Warnung und Stopp laufen **immer, für alle Sitzungen**. Das musst du nie einschalten. Wer den geordneten Stopp auch
+am 5-Stunden-Limit will: `[schwellen] claude_stopp_art = "geordnet"`.
 
 ### Was der Nachtmodus macht
 
-Der Nachtmodus beantwortet nur eine Frage: **Geht es nach dem Reset automatisch weiter?**
+**Nativ zuerst (seit 1.4):** Claudes eingebautes Weitermachen am Limit läuft **immer**, der Wächter sperrt es nie
+(einzige Ausnahme: Wochenreserve). Der Nachtmodus beantwortet nur noch: **Darf der Wächter selbst eingreifen?**
 
-- **Ohne Nachtmodus (normal, tagsüber):** Nach dem Reset geht nichts von selbst weiter, auch Claudes eingebautes
-  Weitermachen ist gesperrt. Du bekommst einen Push („… Sitzungen warten auf ‚weiter‘“), gehst in die Sitzung und
-  tippst **„weiter“**. So wird dein frisches Limit nicht ohne dich verbraucht.
-- **Mit Nachtmodus:** Nach dem Reset setzt der Wächter die Sitzungen selbst fort. Vorher liest er den Bildschirm:
-  Menüs oder Kaufoptionen tippt er nie an, dann kommt nur ein Push. Er versucht es höchstens 2-mal pro Sitzung. Der
+- **Ohne Nachtmodus (normal, tagsüber):** Der Wächter greift nach dem Reset nicht ein. Claude macht am Limit von
+  selbst weiter. Klappt das nicht (z. B. nach längerem Schlaf) oder bei Codex, bekommst du einen Push („… Sitzungen
+  warten auf ‚weiter‘“), gehst in die Sitzung und tippst **„weiter“**.
+- **Mit Nachtmodus:** Der Wächter springt ein, wo Claudes eigenes Weitermachen nicht greift (Mac hat länger als
+  30 Minuten geschlafen, mehr als 2 Zyklen, Remote Control, Wochen-Reset mehr als 24 Stunden entfernt), setzt Codex
+  fort und hält den Mac wach. Er gibt Claude vorher ein paar Minuten Vorsprung und liest den Bildschirm: Menüs oder
+  Kaufoptionen tippt er nie an, dann kommt nur ein Push. Er versucht es höchstens 2-mal pro Sitzung. Der
   Nachtmodus gilt **bis 08:00** und schaltet sich dann **von selbst ab**; um 8 Uhr kommt ein Morgenbericht.
 - **Ausnahme Wochenreserve:** Ab 80 % Wochenverbrauch geht es auch im Nachtmodus nicht automatisch weiter, damit
   für den Rest der Woche etwas übrig bleibt.
 
 ### So benutzt du es im Alltag
 
-- **Tagsüber:** nichts tun. Kommt ein Stopp, tippst du nach dem Reset in der Sitzung „weiter“.
+- **Tagsüber:** nichts tun. Claude macht nach dem Reset selbst weiter; nur bei einem Push tippst du „weiter“.
 - **Abends, wenn nachts etwas weiterlaufen soll:** Nachtmodus einschalten, und zwar entweder
   - in der Menüleiste aufs Ring-Symbol klicken → Schalter **Nachtmodus** (alle Sitzungen) oder den **Mond** neben
     einer Sitzung (nur diese),
@@ -58,16 +64,16 @@ Den vollen Umfang gibt es aber nur in Orca: Nur dort liest er den Bildschirm und
 **Außerhalb von Orca tippt er nie, liest nie einen Bildschirm und öffnet nie ein Fenster.** Er nutzt dort nur
 offizielle Wege. Das heißt im normalen Terminal:
 
-- Warnung und geordneter Stopp funktionieren bei Claude wie in Orca (über die Hooks, echt getestet).
-- Nach dem Reset tippt niemand automatisch weiter. Mit Nachtmodus darf Claudes **eingebautes** Weitermachen am
-  Limit laufen. Sonst bekommst du einen Push mit einem **Befehl zum Kopieren** (z. B. `claude --resume <ID>`).
+- Warnung und Stopp funktionieren bei Claude wie in Orca (über die Hooks, echt getestet).
+- Nach dem Reset tippt der Wächter nie. Claudes **eingebautes** Weitermachen am Limit läuft (immer). Greift es
+  nicht, bekommst du einen Push mit einem **Befehl zum Kopieren** (z. B. `claude --resume <ID>`).
 - Skript-Aufrufe ohne Fenster (`claude -p`, Agent SDK) und Claude Code im Web lässt er außerhalb von Orca in Ruhe.
 
 | Wo du arbeitest | Warnung | Geordneter Stopp | Fortsetzen nach dem Reset |
 |---|---|---|---|
 | **Claude Code im Orca-Terminal** | ✅ | ✅ | ✅ (mit Nachtmodus) |
 | **Codex im Orca-Terminal** | ✅ | ✅ | ✅ (mit Nachtmodus) |
-| Claude Code im normalen Terminal (Terminal.app, iTerm, VS Code …) | ✅ | ✅ | nur Claudes eingebautes Weitermachen am Limit (mit Nachtmodus), sonst Push mit Befehl |
+| Claude Code im normalen Terminal (Terminal.app, iTerm, VS Code …) | ✅ | ✅ | Claudes eingebautes Weitermachen am Limit (immer), sonst Push mit Befehl |
 | Codex im normalen Terminal | ✅ | ❌ | nur Push mit Befehl (`codex resume <ID>`); experimentell und ungetestet: `codex_queue = true` |
 | Claude-Desktop-App | ✅ | vermutlich wie im Terminal (nicht bestätigt) | vermutlich wie im Terminal (nicht bestätigt) |
 | Codex-App | ✅ nur Anzeige | ❌ | ❌ |
@@ -88,8 +94,8 @@ Kurz: Weil es dort keinen sicheren Weg gibt, „weiter“ zu schreiben.
   mit simulierten Klicks oder Tastendrücken, und die könnten im Limit-Dialog genauso gut einen **Kauf-Knopf**
   treffen. Genau das macht der Wächter nie.
 - **Claude kann es schon selbst.** In Claude Code (auch in der Desktop-App, soweit dort die Hooks laufen) gibt es
-  Claudes eingebautes Weitermachen am Limit. Mit Nachtmodus lässt der Wächter es laufen, ohne Nachtmodus sperrt er
-  es. Die Desktop-App macht also am harten Limit offiziell von selbst weiter.
+  Claudes eingebautes Weitermachen am Limit. Seit 1.4 sperrt der Wächter es nie (nur die Wochenreserve). Die
+  Desktop-App macht also am harten Limit offiziell von selbst weiter.
 - **Die Codex-App hat nichts Vergleichbares.** Sie hat eigene Technik ohne Hooks und ohne `codex queue`. Der
   Wächter kann dort nur anzeigen und warnen. Lange Codex-Aufgaben deshalb in einem Orca-Terminal starten.
 
@@ -125,12 +131,32 @@ Liefern Orca und die Statusline beide Werte, gewinnt der frischere. Ersetzt Orca
 Statusline später, zeigen `status` und die App einen Hinweis; dann einfach `./install.sh` erneut ausführen.
 Die Statusline läuft nur, solange eine Claude-Sitzung offen ist.
 
+**Seit 1.4 zeigt der Wächter dort auch eine eigene Zeile** unter deiner bisherigen Statusline (die bleibt oben und
+unverändert):
+
+```
+Opus 5.5 · ctx ████░░░░░░ 41% 412k/1M · 5h 63% ↻14:20 · Wo 38% · ☾
+```
+
+Modell, wie voll der **Kontext** der Sitzung ist (Balken, Prozent, Tokens), 5-Stunden-Füllstand mit Reset-Uhrzeit,
+Woche und ein Mond im Nachtmodus. Grün, ab Warnung gelb, ab kritisch/Stopp rot. Im schmalen Terminal wird sie
+kürzer; was unbekannt ist, fehlt einfach. Abschalten: `[statusline] anzeigen = false`.
+
+### Kontext je Sitzung (seit 1.4)
+
+Der Wächter merkt sich für jede Sitzung, wie voll das Kontextfenster ist (Claude: aus der Statusline, sonst aus dem
+Protokoll der Sitzung; Codex: aus seinem Sitzungsprotokoll). Ab **70 %** (Warnung) und ab **85 %** (kritisch) kommt
+**je Sitzung und Stufe genau ein** Push + Banner – nach einer Kompaktierung darf er wiederkommen. Das ist ein guter
+Moment für eine Übergabe oder `/compact`. Ändern: `./waechter.py schwellen setzen kontext_warnung=70
+kontext_kritisch=85` oder in der App. Mit `[kontext] hinweis_an_sitzung = true` bekommt Claude selbst einmal je Stufe
+einen kurzen Hinweis („Kontext bei 72 % – Übergabe/Kompaktierung vorbereiten“); Standard ist aus.
+
 ## Was der Wächter macht, in drei Sätzen
 
 Er schaut jede Minute, wie voll dein Claude- und Codex-Kontingent ist (5-Stunden-Fenster und Woche). Kurz vor dem
-Limit sorgt er dafür, dass deine Agenten ihren Stand sichern und geordnet anhalten. Nach dem Reset setzt er
-die Sitzungen im **Nachtmodus** automatisch fort; alle anderen warten auf dein „weiter“, und du bekommst einen Push.
-Geld gibt er nie aus.
+Limit bremst er (keine neuen Subagents/Workflows; beim Wochenlimit und bei Codex geordnet anhalten), Claude macht
+nach dem Reset selbst weiter. Im **Nachtmodus** springt er ein, wo das nicht klappt, und setzt Codex fort; sonst
+bekommst du einen Push und tippst „weiter“. Geld gibt er nie aus.
 
 ## Wo gebe ich die Befehle ein?
 
@@ -157,7 +183,7 @@ Tipp: Mit `alias lw="~/pfad/zu/agent-limit-watchdog/waechter.py"` in der `~/.zsh
 | `./waechter.py pause 2h` | Pause für 2 Stunden (auch `30m`, `1d`), danach automatisch wieder an |
 | `./waechter.py pause aus` | **Wächter wieder an** (gleich: `./waechter.py weiter`) |
 | `./waechter.py schwellen` | aktuelle Schwellen anzeigen |
-| `./waechter.py schwellen setzen stopp=90` | Schwellen ändern (siehe unten) |
+| `./waechter.py schwellen setzen stopp=90` | Schwellen ändern, auch `kontext_warnung=70 kontext_kritisch=85` (siehe unten) |
 | `./waechter.py report` | Bericht der letzten 24 Stunden (`--stunden 48` für mehr) |
 | `./waechter.py simulate zyklus` | kompletter Probelauf mit Probedaten, nichts wird gesendet |
 | `./waechter.py simulate stop` | zeigt, was jetzt bei 93 % passieren würde (echte Terminals werden nur gelesen) |
@@ -173,9 +199,10 @@ In der Pause sperrt der Wächter nichts; Claudes eigenes Auto-Continue am Limit 
 
 ## Nachtmodus (seit 1.1)
 
-Der geordnete Stopp läuft immer für alle Sitzungen. **Automatisch fortgesetzt** wird nach dem Reset aber nur, wer im
-Nachtmodus ist. Alle anderen Sitzungen warten auf „weiter“ – auch Claudes eingebautes Auto-Continue wird für sie
-gesperrt –, und du bekommst je Anbieter einen Push „… Sitzung(en) warten auf „weiter““.
+Claudes eingebautes Auto-Continue läuft seit 1.4 immer. **Der Wächter selbst** setzt nach dem Reset nur Sitzungen im
+Nachtmodus fort: Claude, wenn das eingebaute Weitermachen nach ein paar Minuten nicht gegriffen hat, und Codex.
+Ohne Nachtmodus warten gestoppte Sitzungen und Codex auf „weiter“, und du bekommst je Anbieter einen Push
+„… Sitzung(en) warten auf „weiter““.
 
 - **Einschalten:** `./waechter.py nacht an` (alle, auch später gestartete) oder `nacht an <Sitzung>`. In einer
   Claude-Sitzung einfach `#nacht` tippen (`#nacht alle`, `#nacht aus`). Der Hook fängt das ab, es geht nicht ans
@@ -244,14 +271,26 @@ nur_orca = false           # true = nur Sitzungen in Orca-Terminals überwachen 
 
 [schwellen]
 warnung = 80               # ab so viel % des 5h-Fensters: Warnung aufs Handy
-stopp = 92                 # ab so viel %: geordneter Stopp (sichern, anhalten)
+stopp = 92                 # ab so viel %: Stopp (Claude sanft, siehe claude_stopp_art; Codex geordnet)
 woche_warnung = 80         # dasselbe fürs Wochenfenster
 woche_stopp = 92
 wochen_reserve = 20        # ab 100 - 20 = 80 % Wochenverbrauch: keine automatische Fortsetzung mehr
+claude_stopp_art = "sanft" # "geordnet" = Sicherungsauftrag und Anhalten auch am 5h-Stopp (wie bis 1.3)
+
+[kontext]
+warnung = 70               # % des Kontextfensters: Push + Banner (einmal je Sitzung und Stufe)
+kritisch = 85
+hinweis_an_sitzung = false # true = Claude bekommt einmal je Stufe einen kurzen Hinweis
+
+[statusline]
+anzeigen = true            # eigene Zeile unter deiner Statusline in Claude Code
+
+[anzeige]
+ruht_stunden = 12          # ruhende Sitzungen nur zeigen, wenn jünger
 
 [fortsetzen]
 aktiv = true               # false = nach dem Reset nie automatisch fortsetzen (Stopp läuft trotzdem)
-nur_mit_nachtmodus = true  # nur Sitzungen im Nachtmodus fortsetzen; false = alles (Verhalten von 1.0)
+nur_mit_nachtmodus = true  # Wächter setzt nur Sitzungen im Nachtmodus fort (Claudes eigenes läuft immer); false = alles
 codex_queue = false        # experimentell, ungetestet: Codex im normalen Terminal per `codex queue` stoppen/fortsetzen
 puffer_minuten = 2         # so lange nach dem Reset warten
 max_pro_fenster = 2        # höchstens so viele automatische Fortsetzungen je Sitzung und Fenster
@@ -267,11 +306,11 @@ bei_nachtmodus = true      # Mac wach halten, solange der Nachtmodus läuft
 uhrzeit = "08:00"          # Morgenbericht; hier endet auch der Nachtmodus
 ```
 
-Die fünf Schwellen gehen auch per Befehl, ohne die Datei selbst zu bearbeiten:
-`./waechter.py schwellen setzen warnung=80 stopp=92 woche_warnung=80 woche_stopp=92 wochen_reserve=20`
-(einzelne Werte reichen). Erlaubt sind ganze Zahlen von 1 bis 99, die Reserve von 0 bis 50, und die Warnung muss
-unter dem Stopp liegen. Der Befehl schreibt nur die Zeilen unter `[schwellen]` in `config.local.toml`, alles andere
-samt Kommentaren bleibt stehen. Bei einem Fehler ändert er nichts.
+Die Schwellen gehen auch per Befehl, ohne die Datei selbst zu bearbeiten:
+`./waechter.py schwellen setzen warnung=80 stopp=92 woche_warnung=80 woche_stopp=92 wochen_reserve=20
+kontext_warnung=70 kontext_kritisch=85` (einzelne Werte reichen). Erlaubt sind ganze Zahlen von 1 bis 99, die
+Reserve von 0 bis 50, und die Warnung muss unter dem Stopp bzw. unter „kritisch“ liegen. Der Befehl schreibt nur die
+Zeilen unter `[schwellen]` bzw. `[kontext]` in `config.local.toml`, alles andere samt Kommentaren bleibt stehen. Bei einem Fehler ändert er nichts.
 
 Änderungen wirken beim nächsten Durchlauf (höchstens eine Minute). Mit `./waechter.py status` siehst du die
 aktiven Schwellen. Ist die Datei fehlerhaft, nimmt der Wächter die Standardwerte und schreibt das ins Log.
@@ -293,13 +332,14 @@ Kaufmenüs.
   1. **Ein Satz zum Gesamtzustand**, z. B. „Alles gut“, „Stopp – Reset 17:50“ oder „2 Sitzung(en) warten“.
   2. **Je eine Karte für Claude und Codex:** 5-Stunden-Wert groß, Woche darunter, Balken mit Markierungen für
      Warnung und Stopp, Reset-Uhrzeit und woher der Wert kommt (z. B. „offiziell · vor 1 min“).
-  3. **Sitzungen kompakt:** Projekt, Ort und ein farbiger Zustand („arbeitet“, „wartet bis 07:32“, „„weiter“
-     nötig“, „blockiert“ …); der Mond schaltet den Nachtmodus je Sitzung.
+  3. **Sitzungen kompakt:** Projekt, Ort und ein farbiger Zustand („arbeitet“, „Claude setzt ab 07:32 selbst fort“,
+     „„weiter“ nötig“, „blockiert“ …), seit 1.4 mit Modell und schmalem Kontextbalken; der Mond schaltet den
+     Nachtmodus je Sitzung. Ruhende Sitzungen, die älter als 12 Stunden sind, fallen weg.
   4. **Schnellschalter:** **Nacht** (alle Sitzungen), **Wach** (Wach-Modus, das Passwort-Fenster kommt von macOS)
      und **Pause**.
   5. **Einstellungen** (eingeklappt): Schwellen, Hinweise, Bericht, Log.
 - **Bedienen:** Pause für 30 Minuten, 2 Stunden oder bis du fortsetzt; Nachtmodus für alle oder je Sitzung;
-  Wach-Modus an/aus; die fünf Schwellen ändern und speichern (landet in `config.local.toml`); Bericht ansehen; Log
+  Wach-Modus an/aus; die Schwellen samt Kontext-Stufen ändern und speichern (landet in `config.local.toml`); Bericht ansehen; Log
   öffnen; Beenden.
 - **Sprache:** Die App übernimmt `sprache` aus der Konfiguration.
 - **Rückbau:** `./uninstall.sh` entlädt auch den Autostart der App und verschiebt App und Autostart-Datei nach
@@ -312,9 +352,9 @@ Kaufmenüs.
 |---|---|---|
 | OK | unter 80 % | nichts |
 | Warnung | ab 80 % | Push und Banner |
-| Stopp | ab 92 % | Claude: keine neuen Subagents/Workflows; am Ende des Turns genau ein Sicherungsauftrag (Status-/Übergabedatei, WIP-Commit ohne Push, laufende Workflows mit Run-ID notieren), dann hält die Sitzung an. Codex bekommt eine kurze Nachricht mit derselben Bitte. |
-| Limit | 100 % | Sitzungen werden mit Reset-Zeit gemerkt, der Mac bleibt wach (Wach-Modus automatisch) |
-| Reset | Reset + 2 min | Sitzungen im Nachtmodus: Wächter liest den Bildschirm und setzt fort, außer dort steht ein Menü, eine Kaufoption oder etwas Unklares. Alle anderen warten auf „weiter“ (ein Push). |
+| Stopp | ab 92 % | Claude (sanft): keine neuen Subagents/Workflows, einmal ein kurzer Hinweis, Claude arbeitet weiter. Wochen-Stopp, Wochenreserve und Codex (geordnet): am Ende des Turns genau ein Sicherungsauftrag (Status-/Übergabedatei, WIP-Commit ohne Push, laufende Workflows mit Run-ID notieren), dann hält die Sitzung an. |
+| Limit | 100 % | Sitzungen werden mit Reset-Zeit gemerkt; im Nachtmodus bleibt der Mac wach (Wach-Modus automatisch) |
+| Reset | Reset + 2 min | Claude macht selbst weiter. Sitzungen im Nachtmodus, bei denen das nicht greift, und Codex: Wächter liest den Bildschirm und setzt fort, außer dort steht ein Menü, eine Kaufoption oder etwas Unklares. Ohne Nachtmodus: Push, du tippst „weiter“. |
 
 Von Hand fortsetzen: in der Sitzung einfach „weiter“ schreiben. Claude liest dann die eigene Sicherung.
 
@@ -323,8 +363,10 @@ Von Hand fortsetzen: in der Sitzung einfach „weiter“ schreiben. Claude liest
 - **Warnschwelle / Stopp-Schwelle / Limit erreicht:** zur Info, du musst nichts tun.
 - **„Fortsetzung angehalten – … Nichts gesendet“:** Am Bildschirm stand ein Menü oder ein Kaufhinweis. Bitte selbst
   ansehen; der Wächter tippt dort bewusst nichts.
-- **„Limit zurückgesetzt – … Sitzung(en) warten auf „weiter““:** Diese Sitzungen waren nicht im Nachtmodus. Schreib
-  dort „weiter“, wenn du weitermachen willst.
+- **„Limit zurückgesetzt – … Sitzung(en) warten auf „weiter““:** Diese Sitzungen waren nicht im Nachtmodus und
+  haben nicht von selbst weitergemacht. Schreib dort „weiter“, wenn du weitermachen willst.
+- **„Kontext der Sitzung … bei 72 %“ / „kritisch“:** Die Sitzung wird voll. Jetzt eine Übergabe schreiben lassen oder
+  `/compact` – danach darf die Meldung wiederkommen.
 - **„Wochenreserve erreicht“:** Ab jetzt keine automatische Fortsetzung mehr bis zum Wochen-Reset.
 - **„Mac: … Remote-Modus aus“ (nachts):** Der Mac würde zugeklappt schlafen oder hängt am Akku. Dann klappt die
   Fortsetzung nicht. Abhilfe: Netzteil anschließen und `./waechter.py wach an` (steht auch im Push).

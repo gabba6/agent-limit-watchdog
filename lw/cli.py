@@ -52,8 +52,10 @@ def _ja(wert, gross=False):
 
 
 SCHWELLEN = ("warnung", "stopp", "woche_warnung", "woche_stopp", "wochen_reserve")
+KONTEXT_SCHWELLEN = ("kontext_warnung", "kontext_kritisch")          # v1.4: [kontext] warnung / kritisch
 SCHWELLEN_ALIAS = {"warn": "warnung", "stop": "stopp", "weekly_warn": "woche_warnung", "weekly_stop": "woche_stopp",
-                   "weekly_reserve": "wochen_reserve"}
+                   "weekly_reserve": "wochen_reserve", "context_warn": "kontext_warnung",
+                   "context_critical": "kontext_kritisch"}
 APP_PRAEFIXE = ("app_", "phase_", "z_")
 
 
@@ -84,12 +86,24 @@ def _orca_vorhanden(k, daten, orca):
     return os.access(k["daten"]["orca"], os.X_OK)
 
 
+def nativ(x, k=None):
+    """v1.4 N1/N3: Claude-Sitzung am Limit, die Claudes eingebaute Fortsetzung selbst weiterführt (überall, ohne
+    Nachtmodus; nur die Wochenreserve sperrt sie)."""
+    if x.get("anbieter") != "claude" or x.get("status") not in ("limit", "eingebaut_wartet"):
+        return False
+    if x.get("reserve_bei_halt") and (k is None or k["fortsetzen"].get("reserve_sperrt_eingebaute_fortsetzung", True)):
+        return False
+    return True
+
+
 def automatisch(x, k, now, orca_ok=True):
     """Wird diese wartende Sitzung nach dem Reset automatisch fortgesetzt (für die Anzeige)?
-    Außerhalb von Orca nur Codex per codex queue oder Claudes eingebaute Fortsetzung am harten Limit."""
+    Claude am Limit: seit 1.4 immer (Claudes eingebaute Fortsetzung, „nativ zuerst“); sonst nur, wenn der Wächter
+    selbst fortsetzt (Orca bzw. Codex per codex queue) und – mit nur_mit_nachtmodus – der Nachtmodus an ist."""
     f = orte.faehigkeiten(x, k, orca_ok)["fortsetzen"]
-    eingebaut = x.get("anbieter") == "claude" and x.get("status") in ("limit", "eingebaut_wartet")
-    if f != "ja" and not (f == "push" and eingebaut):
+    if nativ(x, k) and f != "nein":
+        return True
+    if f != "ja":
         return False
     nb = nacht.bis(x, now)
     return bool(not k["fortsetzen"]["nur_mit_nachtmodus"] or (nb and nb > (x.get("fortsetzen_ab") or 0)))
@@ -124,6 +138,7 @@ def cmd_status(args, k):
     sl = statusline_info()
     if args.json:
         liste = []
+        _ROLLOUT_INDEX["index"] = _rollout_index(daten)
         for x in sitzungen:
             f = orte.faehigkeiten(x, k, daten["orca_ok"])
             eigen = x.get("nacht_bis") if (x.get("nacht_bis") or 0) > now else None
@@ -136,6 +151,8 @@ def cmd_status(args, k):
                            faehigkeiten_text=faehigkeiten_text(f))
             for fz in SITZUNG_JSON_ZUSATZ:
                 fz(eintrag, x, k, now)
+            if eintrag.get("lage") == "ruht" and not ruht_anzeigen(eintrag, k, now):
+                continue                 # v1.4: alte ruhende Sitzungen ausblenden ([anzeige] ruht_stunden)
             liste.append(eintrag)
         ausgabe = {"version": VERSION, "jetzt": now, "sprache": sprache.AKTUELL,
                    "phasen": ph, "pausiert": pausiert, "pause_bis": pause_bis,
@@ -177,17 +194,25 @@ def cmd_status(args, k):
     print(t("st_schwellen", w=s["warnung"], s=s["stopp"], ww=s["woche_warnung"], ws=s["woche_stopp"],
             r=s["wochen_reserve"], ab=100 - s["wochen_reserve"]))
     frisch = [x for x in sitzungen if now - x.get("zuletzt", 0) < 2 * 86400 and x.get("status") != "beendet"]
+    index = _rollout_index(daten)
     print(t("st_sitzungen", c=sum(1 for x in frisch if x["anbieter"] == "claude"),
             x=sum(1 for x in frisch if x["anbieter"] == "codex")))
     for x in sorted(frisch, key=lambda x: -x.get("zuletzt", 0)):
-        if x.get("status") == "aktiv" and not args.alle:
+        if x.get("status") == "aktiv" and not args.alle or not anzeigen(x, k, now):
             continue
         extra = ""
         nb = nacht.bis(x, now)
         if x.get("status") in register.WARTET and x.get("fortsetzen_ab"):
-            extra = t("st_ab" if automatisch(x, k, now, daten["orca_ok"]) else "st_weiter_noetig", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
+            if nativ(x, k):
+                extra = t("st_nativ", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
+            else:
+                extra = t("st_ab" if automatisch(x, k, now, daten["orca_ok"]) else "st_weiter_noetig",
+                          zeit=util.uhrzeit(x["fortsetzen_ab"], now))
         if nb:
             extra += t("st_nacht", zeit=util.uhrzeit(nb, now))
+        kx = kontextfenster.ermitteln(x, k, index)
+        if kx:
+            extra += t("st_kontext", pct=sprache.prozent(kx["prozent"]))
         print(f"  {x['anbieter']:6} {str(x['id'])[:8]} {t('ort_' + orte.ort(x))[:8]:8} "
               f"{os.path.basename(x.get('cwd') or '?')[:28]:28} "
               f"{zustand_text(x.get('status')):26}{extra}")
@@ -397,12 +422,18 @@ def _schwellen_ausgabe(s, als_json):
     if als_json:
         print(json.dumps({"ok": True, "schwellen": s}, ensure_ascii=False))
     else:
-        for n in SCHWELLEN:
+        for n in SCHWELLEN + KONTEXT_SCHWELLEN:
             print(t("sw_zeile", name=n, wert=s[n]))
 
 
+def _alle_schwellen(k):
+    werte = {n: k["schwellen"][n] for n in SCHWELLEN}
+    werte.update({n: k["kontext"][n.split("_", 1)[1]] for n in KONTEXT_SCHWELLEN})
+    return werte
+
+
 def cmd_schwellen(args, k):
-    aktuell = {n: k["schwellen"][n] for n in SCHWELLEN}
+    aktuell = _alle_schwellen(k)
     aktion = (args.aktion or "").lower()
     if not aktion:
         _schwellen_ausgabe(aktuell, args.json)
@@ -418,7 +449,7 @@ def cmd_schwellen(args, k):
             continue
         name, roh = (x.strip() for x in teil.split("=", 1))
         name = SCHWELLEN_ALIAS.get(name.lower(), name.lower())
-        if name not in SCHWELLEN:
+        if name not in SCHWELLEN + KONTEXT_SCHWELLEN:
             fehler.append(t("sw_schluessel", name=name))
             continue
         grenzen = (0, 50) if name == "wochen_reserve" else (1, 99)
@@ -430,9 +461,12 @@ def cmd_schwellen(args, k):
             fehler.append(t("sw_zahl", name=name, min=grenzen[0], max=grenzen[1]))
             continue
         werte[name] = zahl
+    kontext = {n.split("_", 1)[1]: w for n, w in werte.items() if n in KONTEXT_SCHWELLEN}
+    schwellen = {n: w for n, w in werte.items() if n in SCHWELLEN}
     if not fehler:
         probe = {a: dict(v) if isinstance(v, dict) else v for a, v in k.items()}
-        probe["schwellen"].update(werte)
+        probe["schwellen"].update(schwellen)
+        probe["kontext"].update(kontext)
         fehler = konfig.pruefen(probe)
     if fehler:
         if args.json:
@@ -440,7 +474,11 @@ def cmd_schwellen(args, k):
         else:
             print(t("sw_fehler", fehler="; ".join(fehler)))
         return 2
-    datei = konfig.lokal_setzen("schwellen", werte)
+    datei = None
+    if schwellen:
+        datei = konfig.lokal_setzen("schwellen", schwellen)
+    if kontext:
+        datei = konfig.lokal_setzen("kontext", kontext)
     aktuell.update(werte)
     if not args.json:
         print(t("sw_gespeichert", datei=datei))
@@ -732,6 +770,58 @@ def _status_text_wach(k, now, daten):
 PARSER_ZUSATZ.append(_parser_wach)
 STATUS_JSON_ZUSATZ.append(_status_json_wach)
 STATUS_TEXT_ZUSATZ.append(_status_text_wach)
+
+
+# ---- v1.4: Kontext je Sitzung, ruhende Sitzungen ausblenden ----
+from . import kontextfenster  # noqa: E402
+
+
+def anzeigen(x, k, now):
+    """Textausgabe: normal laufende Sitzungen nur zeigen, wenn sie sich in den letzten [anzeige] ruht_stunden
+    gemeldet haben; wartende, blockierte usw. immer."""
+    if x.get("status") not in ("aktiv", "eingebaut_fortgesetzt", "fortgesetzt") or \
+            (x.get("status") == "fortgesetzt" and x.get("geprueft") is False):
+        return True
+    return now - (x.get("zuletzt") or 0) < k["anzeige"]["ruht_stunden"] * 3600
+
+
+def ruht_anzeigen(eintrag, k, now):
+    """status --json: eine ruhende Sitzung nur zeigen, wenn ihre letzte Meldung oder Aktivität jünger als
+    [anzeige] ruht_stunden ist."""
+    letzte = max(eintrag.get("zuletzt") or 0, (eintrag.get("aktivitaet") or {}).get("letzte") or 0)
+    return now - letzte < k["anzeige"]["ruht_stunden"] * 3600
+
+
+def _rollout_index(daten):
+    from . import codex
+    return codex.id_index(daten.get("rollouts") or [])
+
+
+def _sitzung_json_kontext(eintrag, x, k, now):
+    try:
+        eintrag["kontext"] = kontextfenster.ermitteln(x, k, _ROLLOUT_INDEX.get("index"))
+    except (OSError, ValueError, TypeError, KeyError):
+        eintrag["kontext"] = None
+    if nativ(x, k) and eintrag.get("lage") == "wartet" and x.get("fortsetzen_ab"):
+        eintrag["lage_text"] = t("fs_lage_nativ", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
+
+
+_ROLLOUT_INDEX = {}
+
+
+def _status_json_kontext(ausgabe, k, now, daten, sitzungen):
+    ausgabe["kontext_schwellen"] = kontextfenster.schwellen(k)
+
+
+def _status_text_kontext(k, now, daten):
+    s = kontextfenster.schwellen(k)
+    zeilen = [t("st_kontext_schwellen", w=s["warnung"], k=s["kritisch"])]
+    return zeilen
+
+
+SITZUNG_JSON_ZUSATZ.append(_sitzung_json_kontext)
+STATUS_JSON_ZUSATZ.append(_status_json_kontext)
+STATUS_TEXT_ZUSATZ.append(_status_text_kontext)
 
 
 if __name__ == "__main__":
