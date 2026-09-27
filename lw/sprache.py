@@ -613,4 +613,70 @@ TEXTE = {
                             "en": "DRY-RUN: would send via codex queue to {id}: {text}"},
     "log_codex_queue_fehler": {"de": "codex queue an {id} fehlgeschlagen: {fehler}",
                                "en": "codex queue to {id} failed: {fehler}"},
+    # ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+    "nz_log_fehler": {"de": "Offizielle Nutzungsanzeige {n} nicht verfügbar ({fehler}) – Rückfall auf Orca/Statusline",
+                      "en": "Official usage for {n} not available ({fehler}) - falling back to Orca/status line"},
+    "nz_log_ok": {"de": "Offizielle Nutzungsanzeige {n} wieder verfügbar",
+                  "en": "Official usage for {n} available again"},
+    "nz_log_frueh": {"de": "{n}: {art}-Fenster vorzeitig zurückgesetzt – wartende Sitzungen sind sofort fällig",
+                     "en": "{n}: {art} window reset early - waiting sessions are due now"},
+    "nz_push_frueh": {"de": "{n}: Limit ({art}) wurde vorzeitig zurückgesetzt. Wartende Sitzungen werden jetzt fortgesetzt.",
+                      "en": "{n}: the {art} limit was reset early. Waiting sessions continue now."},
+    "nz_q_offiziell": {"de": "offiziell", "en": "official"},
+    "nz_q_orca": {"de": "Orca", "en": "Orca"},
+    "nz_q_statusline": {"de": "Statusline", "en": "status line"},
+    "nz_q_rollout": {"de": "Codex-Protokoll", "en": "Codex log"},
+    "nz_q_keine": {"de": "keine Daten", "en": "no data"},
+    "nz_f_auth": {"de": "Anmeldung abgelehnt", "en": "login rejected"},
+    "nz_f_rate": {"de": "zu viele Abrufe, später erneut", "en": "too many requests, retrying later"},
+    "nz_f_netz": {"de": "Netzwerkfehler", "en": "network error"},
+    "nz_f_format": {"de": "Antwort unlesbar", "en": "unreadable response"},
+    "nz_f_kein_token": {"de": "nicht angemeldet", "en": "not logged in"},
+    "nz_f_abgelaufen": {"de": "Anmeldung abgelaufen – einmal Claude Code öffnen",
+                        "en": "login expired - open Claude Code once"},
+    "nz_f_noch_nicht": {"de": "noch kein Abruf", "en": "not fetched yet"},
+    "nz_st_ok": {"de": "{n}-Quelle: {quelle} (vor {dauer})", "en": "{n} source: {quelle} ({dauer} ago)"},
+    "nz_st_keine": {"de": "{n}-Quelle: keine Daten", "en": "{n} source: no data"},
+    "nz_st_fehler": {"de": "   offizielle Anzeige {n}: {grund}", "en": "   official usage {n}: {grund}"},
+    "nz_st_aus": {"de": "Offizielle Nutzungsanzeige: aus ([daten] offiziell = false)",
+                  "en": "Official usage: off ([daten] offiziell = false)"},
+    "nz_g_ok": {"de": "Alles gut", "en": "All good"},
+    "nz_g_warnung": {"de": "{n}: Warnung – {pct} (Reset {zeit})", "en": "{n}: warning - {pct} (resets {zeit})"},
+    "nz_g_stopp": {"de": "Stopp – Reset {zeit}", "en": "Stop - resets {zeit}"},
+    "nz_g_limit": {"de": "Limit – Reset {zeit}", "en": "Limit - resets {zeit}"},
+    "nz_g_wartet": {"de": "{anzahl} Sitzung(en) warten", "en": "{anzahl} session(s) waiting"},
+    "nz_g_pause": {"de": "Pausiert", "en": "Paused"},
+    "nz_g_pause_bis": {"de": "Pausiert bis {zeit}", "en": "Paused until {zeit}"},
+    "nz_g_stoerung": {"de": "Wächter läuft nicht", "en": "Watchdog is not running"},
+    "nz_g_d_auto": {"de": "{n}: {anzahl} Sitzung(en) werden automatisch fortgesetzt",
+                    "en": "{n}: {anzahl} session(s) will continue automatically"},
+    "nz_g_d_hand": {"de": "{n}: {anzahl} Sitzung(en) brauchen danach „weiter“",
+                    "en": "{n}: {anzahl} session(s) need \"continue\" afterwards"},
+    "nz_g_d_anbieter": {"de": "{n}, {art}-Fenster", "en": "{n}, {art} window"},
+    "nz_g_d_naechste": {"de": "nächste Fortsetzung {zeit}", "en": "next continuation {zeit}"},
+    "nz_g_d_agent": {"de": "LaunchAgent nicht geladen – ./install.sh", "en": "LaunchAgent not loaded - ./install.sh"},
+    "nz_g_d_tick": {"de": "letzter Lauf vor {dauer}", "en": "last run {dauer} ago"},
+    "nz_g_d_kein_tick": {"de": "noch kein Lauf", "en": "no run yet"},
+    "nz_kf_ganzzahl": {"de": "daten.{name} muss eine ganze Zahl ab 1 sein",
+                       "en": "daten.{name} must be a whole number of at least 1"},
+    "nz_kf_eng": {"de": "daten.offiziell_intervall_eng_minuten darf nicht größer als offiziell_intervall_minuten sein",
+                  "en": "daten.offiziell_intervall_eng_minuten must not be larger than offiziell_intervall_minuten"},
+    "nz_kf_alter": {"de": "daten.offiziell_max_alter_minuten muss mindestens offiziell_intervall_minuten sein",
+                    "en": "daten.offiziell_max_alter_minuten must be at least offiziell_intervall_minuten"},
+    "nz_kf_abfall": {"de": "daten.frueh_reset_abfall muss zwischen 5 und 100 liegen",
+                     "en": "daten.frueh_reset_abfall must be between 5 and 100"},
+
+    # ======== v1.4 A Ende ========
+
+    # ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+
+    # ======== v1.4 B Ende ========
+
+    # ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+
+    # ======== v1.4 C Ende ========
+
+    # ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
+
+    # ======== v1.4 D Ende ========
 }

@@ -51,6 +51,17 @@ STANDARD = {
         "orca_hook_status": "~/Library/Application Support/orca/agent-hooks/last-status.json",
         "max_alter_minuten": 30,
         "hook_zustand_max_alter_minuten": 10,
+        # v1.4 A: offizielle Nutzungsanzeige (nur lesender Abruf, Token nur zur Laufzeit)
+        "offiziell": True,                          # v1.4 A
+        "offiziell_intervall_minuten": 3,           # v1.4 A
+        "offiziell_intervall_eng_minuten": 1,       # v1.4 A: bei Warnung/Stopp/Limit oder anstehender Fortsetzung
+        "offiziell_max_alter_minuten": 10,          # v1.4 A: jünger -> offizielle Quelle hat Vorrang
+        "offiziell_timeout_sekunden": 8,            # v1.4 A
+        "claude_usage_url": "https://api.anthropic.com/api/oauth/usage",       # v1.4 A
+        "codex_usage_url": "https://chatgpt.com/backend-api/wham/usage",       # v1.4 A
+        "claude_schluesselbund_dienst": "Claude Code-credentials",             # v1.4 A
+        "codex_auth": "~/.codex/auth.json",         # v1.4 A (expanduser beim Lesen in nutzung.codex_token)
+        "frueh_reset_abfall": 20,                   # v1.4 A: Prozentpunkte
     },
     "melden": {
         "ntfy": True,
@@ -69,6 +80,9 @@ STANDARD = {
         "uhrzeit": "08:00",
     },
 }
+
+
+PRUEF_ZUSATZ = []  # f(k) -> [fehlertexte]
 
 
 class KonfigFehler(ValueError):
@@ -194,6 +208,8 @@ def pruefen(k):
         fehler.append('fortsetzen.claude_limit_resume muss "waechter" oder "orca" sein')
     if not re.fullmatch(r"\d{1,2}:\d{2}", str(k["bericht"]["uhrzeit"])):
         fehler.append('bericht.uhrzeit muss wie "08:00" aussehen')
+    for f in PRUEF_ZUSATZ:
+        fehler.extend(f(k))
     return fehler
 
 
@@ -322,3 +338,45 @@ def lokal_setzen(abschnitt, werte, datei=None):
             pass
         raise
     return datei
+
+
+# ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+def _pruefen_daten(k):
+    """v1.4 A: Abrufintervalle der offiziellen Nutzungsanzeige."""
+    d = k.get("daten") or {}
+    fehler = []
+    namen = ("offiziell_intervall_minuten", "offiziell_intervall_eng_minuten", "offiziell_max_alter_minuten",
+             "offiziell_timeout_sekunden")
+    ok = True
+    for name in namen:
+        w = d.get(name, STANDARD["daten"][name])
+        if isinstance(w, bool) or not isinstance(w, int) or w < 1:
+            fehler.append(sprache.t("nz_kf_ganzzahl", name=name))
+            ok = False
+    if ok:
+        normal = d.get("offiziell_intervall_minuten", 3)
+        if d.get("offiziell_intervall_eng_minuten", 1) > normal:
+            fehler.append(sprache.t("nz_kf_eng"))
+        if d.get("offiziell_max_alter_minuten", 10) < normal:
+            fehler.append(sprache.t("nz_kf_alter"))
+    abfall = d.get("frueh_reset_abfall", 20)
+    if isinstance(abfall, bool) or not isinstance(abfall, (int, float)) or not 5 <= abfall <= 100:
+        fehler.append(sprache.t("nz_kf_abfall"))
+    return fehler
+
+
+PRUEF_ZUSATZ.append(_pruefen_daten)
+
+# ======== v1.4 A Ende ========
+
+# ======== v1.4 B (Fortsetzen) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 B Ende ========
+
+# ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 C Ende ========
+
+# ======== v1.4 D (App) – nur zwischen diesen Zeilen einfuegen ========
+
+# ======== v1.4 D Ende ========

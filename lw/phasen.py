@@ -9,12 +9,23 @@ def fenster_id(anbieter, art, reset):
     return f"{anbieter}-{art}-{int(round((reset or 0) / 600.0))}"
 
 
-def waehle_quelle(*kandidaten):
-    """Von mehreren Nutzungsständen den frischesten nehmen."""
+def waehle_quelle(*kandidaten, now=None, max_alter_s=None):
+    """Von mehreren Nutzungsständen den frischesten nehmen.
+
+    v1.4: mit now hat eine junge offizielle Quelle (quelle == "offiziell", höchstens max_alter_s alt) Vorrang;
+    sonst gewinnt der frischeste Stand, Kandidaten ohne Stand verlieren gegen jeden mit Stand
+    (Gleichstand: der zuerst genannte)."""
     gueltig = [k for k in kandidaten if k and (k.get("fuenf") or k.get("woche"))]
     if not gueltig:
         return None
-    return max(gueltig, key=lambda k: k.get("stand") or 0)
+    if now is None:
+        return max(gueltig, key=lambda k: k.get("stand") or 0)
+    for k in gueltig:
+        if k.get("quelle") == "offiziell" and k.get("stand") \
+                and (max_alter_s is None or now - k["stand"] <= max_alter_s):
+            return k
+    mit_stand = [k for k in gueltig if k.get("stand")]
+    return max(mit_stand or gueltig, key=lambda k: k.get("stand") or 0)
 
 
 def berechne(anbieter, daten, hinweise, k, now):

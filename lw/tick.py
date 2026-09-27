@@ -5,6 +5,7 @@ import time
 from . import bericht, codex, fortsetzen, nacht, orte, phasen, quellen, register, sprache, texte, util, wach
 from .sprache import t
 from .orca import OrcaFehler
+from . import nutzung  # v1.4 A
 
 ZUSTAND = ("state", "zustand.json")
 CURRENT = ("state", "current.json")
@@ -19,7 +20,7 @@ def pause_info(now):
     return aktiv, p.get("bis")
 
 
-def daten_sammeln(ctx, sim=None):
+def daten_sammeln(ctx, sim=None, abrufen=True):
     k, now = ctx.k, ctx.now
     vorhanden = ctx.orca_vorhanden()
     d = {"orca_ok": vorhanden, "orca_vorhanden": vorhanden, "fehler": []}
@@ -39,12 +40,87 @@ def daten_sammeln(ctx, sim=None):
     roll = quellen.codex_nutzung(rollouts)
     d["rollouts"] = rollouts
     sl = quellen.claude_statusline(util.pfad(*quellen.STATUSLINE_DATEI))
-    d["claude"] = phasen.waehle_quelle(lim.get("claude"), sl)     # frischere gewinnt, Gleichstand: Orca
-    d["claude_quellen"] = {"orca": (lim.get("claude") or {}).get("stand"), "statusline": (sl or {}).get("stand")}
-    d["codex"] = phasen.waehle_quelle(lim.get("codex"), roll)
+    # v1.4 A: offizielle Nutzungsanzeige zuerst (gedrosselt abrufen; status liest nur den Zwischenspeicher)
+    off = {"claude": None, "codex": None}
+    if k["daten"].get("offiziell", True):
+        if abrufen and not util.offline():
+            nutzung.aktualisieren(k, util.lies_json(util.pfad(*ZUSTAND), {}) or {}, register.alle(), now)
+        off = nutzung.lesen(k, now)
+    max_alter = int(k["daten"].get("offiziell_max_alter_minuten", 10)) * 60
+    # offizielle Quelle hat Vorrang, sonst frischester Stand, Gleichstand: Orca
+    d["claude"] = phasen.waehle_quelle(off["claude"], lim.get("claude"), sl, now=now, max_alter_s=max_alter)
+    d["claude_quellen"] = {"orca": (lim.get("claude") or {}).get("stand"), "statusline": (sl or {}).get("stand"),
+                           "offiziell": (off["claude"] or {}).get("stand")}
+    d["codex"] = phasen.waehle_quelle(off["codex"], lim.get("codex"), roll, now=now, max_alter_s=max_alter)
+    d["offiziell"] = nutzung.info(k, now)
     d["codex_credits"] = (roll or {}).get("credits")
     d["codex_reset_credits"] = (lim.get("codex") or {}).get("reset_credits")
     return d
+
+
+FRUEH_VERTRAUT_S = 300          # statusline/rollout zählen fürs frühe Reset nur, wenn höchstens so alt
+
+
+def _frueh_vertraut(d, now):
+    """Nur verlässliche Quellen dürfen ein frühes Reset auslösen – nie Orca allein."""
+    q = (d or {}).get("quelle")
+    if q == "offiziell":
+        return True
+    return q in ("statusline", "rollout") and bool(d.get("stand")) and now - d["stand"] <= FRUEH_VERTRAUT_S
+
+
+def _kurz_nutzung(d):
+    f5, fw = d.get("fuenf") or {}, d.get("woche") or {}
+    return {"pct5": f5.get("pct"), "reset5": f5.get("reset"), "pctw": fw.get("pct"), "resetw": fw.get("reset"),
+            "quelle": d.get("quelle")}
+
+
+def _nach_daten(ctx, daten, zustand, sitzungen):
+    """v1.4 A: fruehes Reset erkennen. -> True, wenn Sitzungen geaendert wurden.
+
+    Anthropic/OpenAI setzen Fenster gelegentlich vorzeitig zurück. Fällt der Füllstand eines noch laufenden
+    Fensters deutlich oder rückt sein Reset nach vorn, werden wartende Sitzungen sofort fällig."""
+    k, now = ctx.k, ctx.now
+    abfall = k["daten"].get("frueh_reset_abfall", 20)
+    alt_alle = zustand.get("nutzung") or {}
+    neu_alle = {}
+    geaendert = False
+    for anb in ("claude", "codex"):
+        d = daten.get(anb)
+        alt = alt_alle.get(anb) or {}
+        if not d:
+            if alt:
+                neu_alle[anb] = alt
+            continue
+        neu = _kurz_nutzung(d)
+        neu_alle[anb] = neu
+        if not alt or not _frueh_vertraut(d, now):
+            continue
+        for art, pk, rk, stopp in (("fuenf", "pct5", "reset5", k["schwellen"]["stopp"]),
+                                   ("woche", "pctw", "resetw", k["schwellen"]["woche_stopp"])):
+            ar, nr, ap, np = alt.get(rk), neu.get(rk), alt.get(pk), neu.get(pk)
+            if not ar or ar <= now + 300:          # altes Fenster endet ohnehin gleich: normales Reset
+                continue
+            if nr is not None and nr <= now:       # neue Angabe schon abgelaufen: unbrauchbar
+                continue
+            vorgezogen = bool(nr) and nr < ar - 600
+            gefallen = ap is not None and np is not None and ap - np >= abfall and np < stopp
+            if not (vorgezogen or gefallen):
+                continue
+            for s in sitzungen:
+                if s.get("anbieter") == anb and s.get("status") in register.WARTET \
+                        and (s.get("art") or "fuenf") == art and (s.get("fortsetzen_ab") or 0) > now:
+                    def aenderung(x):
+                        x["fortsetzen_ab"] = now
+                        x["reset"] = now
+                    register.aktualisieren(anb, s["id"], aenderung, "fruehes Reset")
+                    geaendert = True
+            util.ereignis("fruehes_reset", anbieter=anb, art=art)
+            util.log(t("nz_log_frueh", n=texte.NAME[anb], art=t("art_" + art)))
+            ctx.melder.senden(t("nz_push_frueh", n=texte.NAME[anb], art=t("art_" + art)), prio=3,
+                              tags=["tada"], schluessel=f"frueh:{anb}:{art}:{int(ar)}")
+    zustand["nutzung"] = neu_alle
+    return geaendert
 
 
 def limit_hinweise(sitzungen, now):
@@ -260,6 +336,30 @@ def _wird_fortgesetzt(k, s, now):
     return bool(b and b > (s.get("fortsetzen_ab") or 0))
 
 
+def _wach_halten(ctx, mac, pausiert):
+    if pausiert:
+        return
+    k, now = ctx.k, ctx.now
+    # Wachhalten und Remote-Modus nur, solange eine Fortsetzung ansteht
+    wartend = [s for s in register.alle() if s.get("status") in register.WARTET and s.get("fortsetzen_ab")
+               and _wird_fortgesetzt(k, s, now)]
+    grenze = now + k["wach"]["max_stunden_voraus"] * 3600
+    naechste = [max(s["fortsetzen_ab"], now) for s in wartend if s["fortsetzen_ab"] <= grenze]
+    if naechste:
+        if k["wach"]["caffeinate"]:
+            wach_text = wach.sicherstellen(max(naechste) + k["wach"]["nachlauf_minuten"] * 60, now, ctx.dry_run)
+            if wach_text:
+                ctx.aktion(wach_text)
+        if k["wach"]["remote_modus_pruefen"] and _nacht(now) and not ctx.melder.bereits(_nacht_schluessel(now)):
+            hinweis = _nacht_hinweis(mac)
+            if hinweis:
+                befehl = k["wach"]["remote_modus_befehl"]
+                aktion = t("nacht_aktion_befehl", befehl=befehl) if befehl else t("nacht_aktion")
+                ctx.melder.senden(t("push_remote_nacht", hinweis=hinweis, zeit=util.uhrzeit(min(naechste)),
+                                    aktion=aktion), prio=4,
+                                  tags=["electric_plug"], schluessel=_nacht_schluessel(now))
+
+
 def ausfuehren(ctx, sim=None, mac_sim=None):
     """Kern eines Ticks. sim: vorgegebene Nutzungsdaten (Simulation/Tests)."""
     k, now = ctx.k, ctx.now
@@ -272,6 +372,8 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
     if not daten["orca_ok"] and daten.get("fehler"):
         ctx.orca_fehler = "; ".join(daten["fehler"])
     sitzungen = register.alle()
+    if _nach_daten(ctx, daten, zustand, sitzungen):
+        sitzungen = register.alle()
     ph = phasen_berechnen(k, daten, sitzungen, now)
     current_schreiben(k, ph, pausiert, now)
 
@@ -318,25 +420,8 @@ def ausfuehren(ctx, sim=None, mac_sim=None):
                         and (s.get("pruefen_ab") or now + 1) <= now:
                     fortsetzen.pruefen(ctx, s)
 
-        # Wachhalten und Remote-Modus nur, solange eine Fortsetzung ansteht
-        wartend = [s for s in register.alle() if s.get("status") in register.WARTET and s.get("fortsetzen_ab")
-                   and _wird_fortgesetzt(k, s, now)]
-        grenze = now + k["wach"]["max_stunden_voraus"] * 3600
-        naechste = [max(s["fortsetzen_ab"], now) for s in wartend if s["fortsetzen_ab"] <= grenze]
-        if naechste:
-            if k["wach"]["caffeinate"]:
-                wach_text = wach.sicherstellen(max(naechste) + k["wach"]["nachlauf_minuten"] * 60, now, ctx.dry_run)
-                if wach_text:
-                    ctx.aktion(wach_text)
-            if k["wach"]["remote_modus_pruefen"] and _nacht(now) and not ctx.melder.bereits(_nacht_schluessel(now)):
-                hinweis = _nacht_hinweis(mac)
-                if hinweis:
-                    befehl = k["wach"]["remote_modus_befehl"]
-                    aktion = t("nacht_aktion_befehl", befehl=befehl) if befehl else t("nacht_aktion")
-                    ctx.melder.senden(t("push_remote_nacht", hinweis=hinweis, zeit=util.uhrzeit(min(naechste)),
-                                        aktion=aktion), prio=4,
-                                      tags=["electric_plug"], schluessel=_nacht_schluessel(now))
         _bericht(ctx, zustand)
+    _wach_halten(ctx, mac, pausiert)
 
     zustand["letzter_tick"] = now
     if now - zustand.get("letztes_lebenszeichen", 0) > 1800:
