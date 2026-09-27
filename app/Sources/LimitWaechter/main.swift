@@ -35,6 +35,11 @@ if let i = argumente.firstIndex(of: "--selbsttest") {
         let orte = (st.sitzungen ?? []).map { $0.ort ?? "-" }.joined(separator: ",")
         print("orca: \(st.orca_vorhanden.map { $0 ? "ja" : "nein" } ?? "-")  statusline: \(st.statusline?.zustand ?? "-")  orte: \(orte)")
         print("nachtmodus: \(st.nacht != nil ? "an" : "aus")  pausiert: \(st.pausiert == true)")
+        // v1.4: Gesamtzustand, Datenquellen, Wach-Modus, Lagen der Sitzungen
+        print("gesamt=\(st.stufe)")
+        print("quelle claude=\(st.phase("claude")?.quelle ?? "-") codex=\(st.phase("codex")?.quelle ?? "-")")
+        print("wach=\(st.wach?.art ?? "-")/\(st.wach?.modus ?? "-")")
+        print("lagen=\(st.aktuelleSitzungen.map { $0.lageName }.joined(separator: ","))")
         if let sw = st.schwellen {
             print("schwellen: \(sw.warnung)/\(sw.stopp) woche \(sw.woche_warnung)/\(sw.woche_stopp) reserve \(sw.wochen_reserve)")
         }
@@ -45,8 +50,19 @@ if let i = argumente.firstIndex(of: "--selbsttest") {
     }
 }
 
+func wertNach(_ option: String) -> String? {
+    guard let i = argumente.firstIndex(of: option), i + 1 < argumente.count else { return nil }
+    return argumente[i + 1]
+}
+
 if argumente.contains("--vorschau") {
-    MainActor.assumeIsolated { Vorschau.starten() }
+    let erscheinung = argumente.contains("--dunkel") ? "dunkel" : (argumente.contains("--hell") ? "hell" : nil)
+    let demo = wertNach("--demo").map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+    let bild = wertNach("--bild").map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+    MainActor.assumeIsolated {
+        Vorschau.einstellungenOffen = argumente.contains("--einstellungen")
+        Vorschau.starten(demo: demo, bild: bild, erscheinung: erscheinung)
+    }
 }
 
 struct LimitWaechterApp: App {
@@ -56,11 +72,7 @@ struct LimitWaechterApp: App {
         MenuBarExtra {
             Hauptansicht().environmentObject(speicher)
         } label: {
-            let st = speicher.status
-            let h = st?.hoechsterFuenf ?? (pct: 0, phase: "ok")
-            Image(nsImage: MenueSymbol.bild(pct: h.pct, phase: h.phase,
-                                            nacht: st?.nacht != nil, pause: st?.pausiert == true,
-                                            stoerung: speicher.startFehler != nil || st?.launchagent == false))
+            Image(nsImage: MenueSymbol.bild(status: speicher.status, startFehler: speicher.startFehler != nil))
         }
         .menuBarExtraStyle(.window)
 
