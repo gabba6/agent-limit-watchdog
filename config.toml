@@ -56,7 +56,7 @@ caffeinate = true                      # caffeinate -i -s until reset + grace ti
 nachlauf_minuten = 15
 max_stunden_voraus = 12                # only keep awake for continuations within the next 12 hours
 remote_modus_pruefen = true            # at night, warn if the Mac would sleep with the lid closed or runs on battery
-remote_modus_befehl = ""               # optional command shown in that warning, e.g. "~/bin/stay-awake.sh on"
+remote_modus_befehl = ""               # command shown in that warning; empty = "waechter.py awake on"
 
 [bericht]                              # morning report
 uhrzeit = "08:00"                      # only sent if something happened overnight; night mode ends at this time
@@ -88,6 +88,12 @@ max_nachpruefungen = 3                 # per session and window: "running alread
 # ======== v1.4 B Ende ========
 
 # ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+[wach]                                 # keep-awake mode (v1.4), see also the [wach] section above
+amphetamine = true                     # use Amphetamine if installed (otherwise caffeinate only, which needs power)
+amphetamine_zugeklappt = true          # own Amphetamine sessions keep the Mac awake with the lid closed
+bei_nachtmodus = true                  # keep the Mac awake automatically while night mode is on (no password)
+sperre_standard = 300                  # screen lock delay in seconds restored by "awake off" if none was saved
+remote_alt_zustand = ""                # optional: state file of an older keep-awake script, read once (never changed)
 
 # ======== v1.4 C Ende ========
 

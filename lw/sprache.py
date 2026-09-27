@@ -696,6 +696,69 @@ TEXTE = {
     # ======== v1.4 B Ende ========
 
     # ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+    "wm_dialog_text": {"de": "Mac-Passwort, um die Bildschirmsperre umzuschalten (Wach-Modus):",
+                       "en": "Mac password to switch the screen lock (awake mode):"},
+    "wm_abbrechen": {"de": "Abbrechen", "en": "Cancel"},
+    "wm_ok": {"de": "OK", "en": "OK"},
+    "wm_abgebrochen": {"de": "Abgebrochen – nichts geändert.", "en": "Cancelled – nothing changed."},
+    "wm_passwort": {"de": "Bildschirmsperre konnte nicht umgeschaltet werden (Passwort falsch?).",
+                    "en": "Could not switch the screen lock (wrong password?)."},
+    "wm_an": {"de": "Wach-Modus AN: Mac bleibt wach (auch zugeklappt), keine Bildschirmsperre. Netzteil anlassen.",
+              "en": "Awake mode ON: the Mac stays awake (also with the lid closed), no screen lock. Keep it on power."},
+    "wm_an_amph_fehler": {"de": "Wach-Modus AN: Bildschirmsperre aus. Hinweis: Amphetamine-Sitzung konnte nicht "
+                                "gestartet werden – zugeklappt schläft der Mac.",
+                          "en": "Awake mode ON: screen lock off. Note: the Amphetamine session could not be started – "
+                                "with the lid closed the Mac sleeps."},
+    "wm_an_ohne_amph": {"de": "Wach-Modus AN: Bildschirmsperre aus. Amphetamine ist nicht installiert – zugeklappt "
+                              "schläft der Mac; am Netzteil hält caffeinate ihn wach, solange eine Fortsetzung "
+                              "ansteht oder der Nachtmodus läuft.",
+                        "en": "Awake mode ON: screen lock off. Amphetamine is not installed – with the lid closed the "
+                              "Mac sleeps; on power caffeinate keeps it awake while a continuation is pending or "
+                              "night mode is on."},
+    "wm_aus": {"de": "Wach-Modus AUS: Bildschirmsperre wieder aktiv ({sperre}).",
+               "en": "Awake mode OFF: screen lock active again ({sperre})."},
+    "wm_uebernommen": {"de": "Gesicherte Sperrzeit aus dem alten Remote-Skript übernommen ({wert}).",
+                       "en": "Saved lock delay taken over from the old remote script ({wert})."},
+    "wm_log": {"de": "Wach-Modus: {text}", "en": "awake mode: {text}"},
+    "wm_aktion": {"de": "Unbekannte Aktion „{aktion}“ – möglich: an, aus, status",
+                  "en": "Unknown action \"{aktion}\" – possible: on, off, status"},
+    "wm_hilfe": {"de": "Wach-Modus: Mac wach halten, Bildschirmsperre aus (an|aus|status)",
+                 "en": "awake mode: keep the Mac awake, screen lock off (on|off|status)"},
+    "wm_meta_aktion": {"de": "an|aus|status", "en": "on|off|status"},
+    "wm_st_zeile": {"de": "{text} · Bildschirmsperre: {sperre} · Amphetamine: {amph}",
+                    "en": "{text} · screen lock: {sperre} · Amphetamine: {amph}"},
+    "wm_sperre_off": {"de": "aus", "en": "off"},
+    "wm_sperre_sofort": {"de": "sofort", "en": "immediate"},
+    "wm_amph_fehlt": {"de": "nicht installiert", "en": "not installed"},
+    "wm_amph_bereit": {"de": "bereit", "en": "ready"},
+    "wm_amph_verweigert": {"de": "Automation nicht erlaubt", "en": "automation not allowed"},
+    "wm_amph_ungeprueft": {"de": "noch nicht geprüft", "en": "not checked yet"},
+    "wm_art_amphetamine": {"de": "Amphetamine", "en": "Amphetamine"},
+    "wm_art_caffeinate": {"de": "caffeinate, nur am Netzteil", "en": "caffeinate, on power only"},
+    "wm_art_aus": {"de": "aus", "en": "off"},
+    "wm_zu_ok": {"de": ", zugeklappt ok", "en": ", lid closed ok"},
+    "wm_zu_nein": {"de": ", zugeklappt schläft er", "en": ", sleeps with the lid closed"},
+    "wm_text_aus": {"de": "Wach-Modus aus", "en": "Awake mode off"},
+    "wm_text_manuell": {"de": "Wach-Modus an, Sperre aus ({art}{zu})", "en": "Awake mode on, screen lock off ({art}{zu})"},
+    "wm_text_manuell_ohne": {"de": "Wach-Modus an, Sperre aus (ohne Amphetamine)",
+                             "en": "Awake mode on, screen lock off (without Amphetamine)"},
+    "wm_text_auto": {"de": "Wach bis {zeit} ({art}{zu})", "en": "Awake until {zeit} ({art}{zu})"},
+    "wm_befehl": {"de": "{pfad} wach an", "en": "{pfad} awake on"},
+    "wm_amph_start": {"de": "Amphetamine-Sitzung bis {zeit} gestartet", "en": "Amphetamine session started until {zeit}"},
+    "wm_amph_dry": {"de": "würde eine Amphetamine-Sitzung bis {zeit} starten",
+                    "en": "would start an Amphetamine session until {zeit}"},
+    "wm_amph_ende": {"de": "eigene Amphetamine-Sitzung beendet", "en": "own Amphetamine session ended"},
+    "wm_amph_ende_dry": {"de": "würde die eigene Amphetamine-Sitzung beenden",
+                         "en": "would end the own Amphetamine session"},
+    "wm_amph_fehler": {"de": "Amphetamine-Sitzung fehlgeschlagen ({fehler})", "en": "Amphetamine session failed ({fehler})"},
+    "wm_push_automation": {"de": "Der Limit-Wächter darf Amphetamine nicht steuern. Erlauben unter Systemeinstellungen > "
+                                 "Datenschutz & Sicherheit > Automation – bis dahin hält nur caffeinate den Mac wach "
+                                 "(nur am Netzteil, zugeklappt schläft er).",
+                           "en": "The watchdog is not allowed to control Amphetamine. Allow it in System Settings > "
+                                 "Privacy & Security > Automation – until then only caffeinate keeps the Mac awake "
+                                 "(on power only, it sleeps with the lid closed)."},
+    "wm_kf_sperre": {"de": "wach.sperre_standard muss eine ganze Zahl von 0 bis 86400 sein",
+                     "en": "wach.sperre_standard must be a whole number from 0 to 86400"},
 
     # ======== v1.4 C Ende ========
 

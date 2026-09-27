@@ -337,27 +337,41 @@ def _wird_fortgesetzt(k, s, now):
 
 
 def _wach_halten(ctx, mac, pausiert):
-    if pausiert:
-        return
+    """v1.4 C: Mac wach halten, solange eine Fortsetzung ansteht oder der Nachtmodus aktiv ist
+    (caffeinate, eigene Amphetamine-Sitzung falls freigegeben); nachts einmal warnen, falls er zugeklappt schliefe."""
     k, now = ctx.k, ctx.now
-    # Wachhalten und Remote-Modus nur, solange eine Fortsetzung ansteht
+    w = k["wach"]
+    if pausiert:
+        for text in wach.automatisch(ctx, None, now):
+            ctx.aktion(text)
+        return
     wartend = [s for s in register.alle() if s.get("status") in register.WARTET and s.get("fortsetzen_ab")
                and _wird_fortgesetzt(k, s, now)]
-    grenze = now + k["wach"]["max_stunden_voraus"] * 3600
+    grenze = now + w["max_stunden_voraus"] * 3600
     naechste = [max(s["fortsetzen_ab"], now) for s in wartend if s["fortsetzen_ab"] <= grenze]
-    if naechste:
-        if k["wach"]["caffeinate"]:
-            wach_text = wach.sicherstellen(max(naechste) + k["wach"]["nachlauf_minuten"] * 60, now, ctx.dry_run)
-            if wach_text:
-                ctx.aktion(wach_text)
-        if k["wach"]["remote_modus_pruefen"] and _nacht(now) and not ctx.melder.bereits(_nacht_schluessel(now)):
-            hinweis = _nacht_hinweis(mac)
-            if hinweis:
-                befehl = k["wach"]["remote_modus_befehl"]
-                aktion = t("nacht_aktion_befehl", befehl=befehl) if befehl else t("nacht_aktion")
-                ctx.melder.senden(t("push_remote_nacht", hinweis=hinweis, zeit=util.uhrzeit(min(naechste)),
-                                    aktion=aktion), prio=4,
-                                  tags=["electric_plug"], schluessel=_nacht_schluessel(now))
+    bedarf_bis = max(naechste) + w["nachlauf_minuten"] * 60 if naechste else None
+    if w.get("bei_nachtmodus", True):
+        # Nachtmodus: global oder eine nicht beendete Sitzung der letzten 2 Tage
+        nb = [nacht.global_bis(now) or 0] + [nacht.bis(s, now) or 0 for s in register.alle()
+                                              if s.get("status") != "beendet"
+                                              and now - (s.get("zuletzt") or 0) < 2 * 86400]
+        if max(nb):
+            bedarf_bis = max(bedarf_bis or 0, max(nb))
+    if bedarf_bis:
+        bedarf_bis = min(bedarf_bis, grenze)
+    for text in wach.automatisch(ctx, bedarf_bis, now):
+        ctx.aktion(text)
+    wach.probe(ctx, now)
+    if naechste and w["remote_modus_pruefen"] and _nacht(now) and not ctx.melder.bereits(_nacht_schluessel(now)):
+        if mac().get("netzteil") and wach.haelt_zugeklappt(k, now):
+            return                   # am Netzteil und selbst zugeklappt wach gehalten: nichts zu tun
+        hinweis = _nacht_hinweis(mac)
+        if hinweis:
+            befehl = w["remote_modus_befehl"] or wach.eigener_befehl()
+            aktion = t("nacht_aktion_befehl", befehl=befehl)
+            ctx.melder.senden(t("push_remote_nacht", hinweis=hinweis, zeit=util.uhrzeit(min(naechste)),
+                                aktion=aktion), prio=4,
+                              tags=["electric_plug"], schluessel=_nacht_schluessel(now))
 
 
 def ausfuehren(ctx, sim=None, mac_sim=None):

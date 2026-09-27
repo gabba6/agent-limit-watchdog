@@ -674,6 +674,60 @@ SITZUNG_JSON_ZUSATZ.append(_sitzung_json_b)
 # ======== v1.4 B Ende ========
 
 # ======== v1.4 C (Wach-Modus) – nur zwischen diesen Zeilen einfuegen ========
+def cmd_wach(args, k):
+    """wach an|aus|status (en: awake on|off|status) – ersetzt das frühere remote.sh."""
+    now = util.jetzt()
+    aktion = (args.aktion or "status").lower()
+    if aktion in wach.AN:
+        erg = wach.wach_an(k, now)
+    elif aktion in wach.AUS:
+        erg = wach.wach_aus(k, now)
+    elif aktion in wach.STATUS:
+        erg = {"ok": True, "fehler": None, "text": None}
+    else:
+        if args.json:
+            print(json.dumps({"ok": False, "fehler": "aktion", "text": t("wm_aktion", aktion=aktion),
+                              "wach": None}, ensure_ascii=False))
+        else:
+            print(t("wm_aktion", aktion=aktion))
+        return 2
+    block = wach.status_block(k, util.jetzt())
+    if args.json:
+        print(json.dumps({"ok": bool(erg["ok"]), "fehler": erg["fehler"], "text": erg["text"], "wach": block},
+                         ensure_ascii=False, indent=1))
+    else:
+        if erg["text"]:
+            print(erg["text"])
+        for z in _wach_zeilen(k, block):
+            print(z)
+    return 0 if erg["ok"] else 1
+
+
+def _wach_zeilen(k, block):
+    return [t("wm_st_zeile", text=block["text"], sperre=wach.sperre_text(block["sperre"]),
+              amph=t("wm_amph_" + block["amphetamine"]))]
+
+
+def _parser_wach(sub):
+    name, alias = _namen("wach", "awake")
+    p = sub.add_parser(name, aliases=alias, help=t("wm_hilfe"))
+    p.add_argument("aktion", nargs="?", metavar=t("wm_meta_aktion"))
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(f=cmd_wach)
+    return name
+
+
+def _status_json_wach(ausgabe, k, now, daten, sitzungen):
+    ausgabe["wach"] = wach.status_block(k, now)
+
+
+def _status_text_wach(k, now, daten):
+    return _wach_zeilen(k, wach.status_block(k, now))
+
+
+PARSER_ZUSATZ.append(_parser_wach)
+STATUS_JSON_ZUSATZ.append(_status_json_wach)
+STATUS_TEXT_ZUSATZ.append(_status_text_wach)
 
 # ======== v1.4 C Ende ========
 
