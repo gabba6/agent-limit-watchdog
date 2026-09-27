@@ -820,8 +820,9 @@ TEXTE = {
     "app_ja": {"de": "ja", "en": "yes"},
     "app_nein": {"de": "nein", "en": "no"},
     # --- App: Kontext je Sitzung (Detailansicht, Mini-Balken, Schwellen) ---
+    # (app_kontext_tokens/_quelle_*/_warnung/_kritisch/_schwellen stehen im Kontext-Block weiter unten)
     "app_kontext_titel": {"de": "Kontext", "en": "Context"},
-    "app_kontext_tokens": {"de": "{tokens} / {fenster} Tokens · {prozent}",
+    "app_kontext_tokens_prozent": {"de": "{tokens} / {fenster} Tokens · {prozent}",
                            "en": "{tokens} / {fenster} tokens · {prozent}"},
     "app_kontext_keine": {"de": "Kontext: noch kein Messwert", "en": "Context: no reading yet"},
     "app_kontext_stufe_ok": {"de": "OK", "en": "OK"},
@@ -836,12 +837,6 @@ TEXTE = {
     "app_kontext_nacht": {"de": "Nachtmodus", "en": "Night mode"},
     "app_kontext_quelle": {"de": "Datenquelle", "en": "Data source"},
     "app_kontext_quelle_alter": {"de": "{quelle} · vor {dauer}", "en": "{quelle} · {dauer} ago"},
-    "app_kontext_quelle_statusline": {"de": "Statusline", "en": "status line"},
-    "app_kontext_quelle_transcript": {"de": "Transcript", "en": "transcript"},
-    "app_kontext_quelle_rollout": {"de": "Codex-Protokoll", "en": "Codex rollout"},
     "app_kontext_details": {"de": "Klicken für Details", "en": "Click for details"},
     "app_kontext_zuklappen": {"de": "Klicken zum Zuklappen", "en": "Click to collapse"},
-    "app_kontext_schwellen": {"de": "Kontext je Sitzung", "en": "Context per session"},
-    "app_kontext_warnung": {"de": "Warnung ab (%)", "en": "Warning at (%)"},
-    "app_kontext_kritisch": {"de": "Kritisch ab (%)", "en": "Critical at (%)"},
 }

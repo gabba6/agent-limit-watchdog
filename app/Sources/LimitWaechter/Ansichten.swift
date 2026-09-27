@@ -395,6 +395,7 @@ struct SitzungZeile: View {
                     }
                     if let k = sitzung.kontext {
                         KontextMini(kontext: k, schwellen: status.kontext_schwellen ?? KontextSchwellen())
+                            .fixedSize()
                     }
                 }
             }

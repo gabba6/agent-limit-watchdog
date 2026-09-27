@@ -13,13 +13,19 @@ Layout (v1.4), top to bottom:
   stop thresholds, reset times and the data source with its age (orange when stale or when the official usage
   display reports an error; the tooltip says why).
 - **Sessions** – project, location and a coloured state chip (working, waiting until …, "continue" needed,
-  blocked …), sorted by what needs attention; night mode per session via the moon.
+  blocked …), sorted by what needs attention; night mode per session via the moon. A small bar shows
+  each session's context fill (green, orange from the context warning, red from critical). Clicking a row expands its
+  **details**: a large context bar with markers at both context thresholds, "412k / 1M tokens · 41%", model,
+  location, state, last activity, running time (when the watchdog reports it), data source with its age (dimmed
+  after 10 min) and a night mode switch.
 - **Quick switches** – night mode for all sessions, awake mode (`wach an|aus`; the password dialog comes from
   `waechter.py`, the app never sees the password) and pause (30 min, 2 h, until resumed).
-- **Settings** (collapsed) – thresholds and notes (status line chain, Orca, official usage display, awake details).
+- **Settings** (collapsed) – thresholds, context warning/critical (`schwellen setzen kontext_warnung=..
+  kontext_kritisch=..`, only shown when the watchdog reports `kontext_schwellen`) and notes (status line chain, Orca, official usage display, awake details).
 
 The app refreshes every 30 s, every 10 s while the popover is open and a stop, limit or waiting session is shown.
-Older `status --json` output without the v1.4 fields still works (the app derives what it needs).
+Older `status --json` output without the v1.4 fields still works (the app derives what it needs); without
+`kontext` a session simply shows no context bar.
 
 Build (no network, ad-hoc signature):
 
@@ -42,9 +48,12 @@ number once loaded, so `screencapture -o -l <number> shot.png` captures only tha
 With demo data and without screen recording permission:
 
 ```sh
-LimitWaechter --vorschau --demo tests/fixtures/app/status.json [--hell|--dunkel] --bild shot.png
+LimitWaechter --vorschau --demo tests/fixtures/app/status.json [--hell|--dunkel] [--detail] [--einstellungen] --bild shot.png
 ```
 
-`--demo` reads the status from the file (all buttons do nothing), `--bild` renders the window to a PNG and quits.
+`--demo` reads the status from the file (all buttons do nothing), `--detail` expands the first session with a
+context reading, `--einstellungen` expands the settings, `--bild` renders the window to a PNG and quits.
+The README screenshot `docs/images/menu-bar-app.png` is made from `tests/fixtures/app/status_en.json` with
+`--hell --detail`.
 
 Installation and the autostart LaunchAgent are handled by `install.sh`.

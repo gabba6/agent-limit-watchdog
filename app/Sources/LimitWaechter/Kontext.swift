@@ -50,7 +50,7 @@ struct KontextMini: View {
                     .foregroundStyle(stufe == "ok" ? AnyShapeStyle(.secondary) : AnyShapeStyle(Farben.kontext(stufe)))
             }
             .font(.caption2)
-            .help(s.t("app_kontext_titel") + ": " + s.t("app_kontext_tokens", [
+            .help(s.t("app_kontext_titel") + ": " + s.t("app_kontext_tokens_prozent", [
                 "tokens": s.tokens(kontext.tokens), "fenster": s.tokens(kontext.fenster), "prozent": s.prozent(w)]))
         }
     }
@@ -116,7 +116,7 @@ struct SitzungDetail: View {
                 }
                 KontextBalken(wert: w, stufe: stufe, schwellen: sw, hoehe: 10)
                 Text(k.tokens != nil && k.fenster != nil
-                     ? s.t("app_kontext_tokens", ["tokens": s.tokens(k.tokens), "fenster": s.tokens(k.fenster),
+                     ? s.t("app_kontext_tokens_prozent", ["tokens": s.tokens(k.tokens), "fenster": s.tokens(k.fenster),
                                                   "prozent": s.prozent(w)])
                      : s.prozent(w))
                     .font(.callout.weight(.semibold)).monospacedDigit()
