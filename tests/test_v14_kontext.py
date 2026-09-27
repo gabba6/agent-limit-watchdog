@@ -5,6 +5,7 @@ import copy
 import io
 import json
 import os
+import tempfile
 import shutil
 import unittest.mock
 
@@ -339,8 +340,12 @@ class KonfigTest(TempHome):
                 self.assertTrue(konfig.pruefen(falsch))
 
     def test_config_toml_enthaelt_neue_schluessel(self):
-        k = konfig.laden(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.toml"),
-                         streng=True)
+        # Kopie ohne daneben liegende config.local.toml: nur die ausgelieferten Standardwerte prüfen
+        quelle = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.toml")
+        with tempfile.TemporaryDirectory() as ordner:
+            ziel = os.path.join(ordner, "config.toml")
+            shutil.copy(quelle, ziel)
+            k = konfig.laden(ziel, streng=True)
         self.assertEqual((k["schwellen"]["claude_stopp_art"], k["kontext"]["warnung"], k["kontext"]["kritisch"],
                           k["statusline"]["anzeigen"], k["anzeige"]["ruht_stunden"]), ("sanft", 70, 85, True, 12))
 

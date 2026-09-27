@@ -26,9 +26,20 @@ extension View {
     func karte(_ toenung: Color? = nil) -> some View { modifier(Karte(toenung: toenung)) }
 }
 
+struct InhaltHoehe: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct Hauptansicht: View {
     @EnvironmentObject var s: Speicher
     @Environment(\.openWindow) private var fensterOeffnen
+    @State private var inhaltHoehe: CGFloat = 400
+
+    /// Platz unter der Menüleiste abzüglich Kopf, Fußzeile und Rand.
+    static var maxInhaltHoehe: CGFloat {
+        max(300, (NSScreen.main?.visibleFrame.height ?? 800) - 150)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Mass.abstand) {
@@ -36,23 +47,34 @@ struct Hauptansicht: View {
                 StartFehlerAnsicht(pfad: pfad)
             } else {
                 Kopf()
-                if let st = s.status {
-                    StatusBanner(status: st)
-                    HStack(alignment: .top, spacing: Mass.eng) {
-                        FuellKarte(anbieter: "claude", name: "Claude", status: st)
-                        FuellKarte(anbieter: "codex", name: "Codex", status: st)
+                // Nie höher als der Bildschirm: sonst schiebt macOS das Fenster nach unten und schneidet es ab.
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: Mass.abstand) {
+                        if let st = s.status {
+                            StatusBanner(status: st)
+                            HStack(alignment: .top, spacing: Mass.eng) {
+                                FuellKarte(anbieter: "claude", name: "Claude", status: st)
+                                FuellKarte(anbieter: "codex", name: "Codex", status: st)
+                            }
+                            .fixedSize(horizontal: false, vertical: true)  // beide Karten gleich hoch
+                            SitzungenBereich(status: st)
+                            SchnellSchalter(status: st)
+                            EinstellungenBereich(status: st)
+                        } else {
+                            HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
+                        }
+                        if let m = s.meldung {
+                            Label(m, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    .fixedSize(horizontal: false, vertical: true)  // beide Karten gleich hoch
-                    SitzungenBereich(status: st)
-                    SchnellSchalter(status: st)
-                    EinstellungenBereich(status: st)
-                } else {
-                    HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
+                    .background(GeometryReader { g in
+                        Color.clear.preference(key: InhaltHoehe.self, value: g.size.height)
+                    })
                 }
-                if let m = s.meldung {
-                    Label(m, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                .scrollIndicators(.automatic)
+                .frame(height: min(inhaltHoehe, Hauptansicht.maxInhaltHoehe))
+                .onPreferenceChange(InhaltHoehe.self) { inhaltHoehe = $0 }
             }
             Divider()
             Fusszeile(berichtOeffnen: {
