@@ -1,0 +1,228 @@
+{
+ "version": "1.4",
+ "jetzt": 1790447300.0,
+ "sprache": "de",
+ "phasen": {
+  "claude": {
+   "anbieter": "claude",
+   "phase": "warnung",
+   "art": "fuenf",
+   "pct": 84.0,
+   "reset": 1790451000.0,
+   "fenster_id": "claude-fuenf-2984085",
+   "pct5": 84.0,
+   "reset5": 1790451000.0,
+   "pctw": 65.0,
+   "resetw": 1790470800.0,
+   "reserve_erreicht": false,
+   "stand": 1790447240.0,
+   "alter": 60.0,
+   "veraltet": false,
+   "quelle": "offiziell",
+   "hat_daten": true,
+   "quelle_text": "offiziell",
+   "woche_modell": [
+    {
+     "name": "Fable",
+     "pct": 41.0,
+     "reset": 1790470800.0
+    }
+   ]
+  },
+  "codex": {
+   "anbieter": "codex",
+   "phase": "ok",
+   "art": "fuenf",
+   "pct": 35.0,
+   "reset": 1790453300.0,
+   "fenster_id": "codex-fuenf-demo",
+   "pct5": 35.0,
+   "reset5": 1790453300.0,
+   "pctw": 12.0,
+   "resetw": 1790755500.0,
+   "reserve_erreicht": false,
+   "stand": 1790447180.0,
+   "alter": 120.0,
+   "veraltet": false,
+   "quelle": "rollout",
+   "hat_daten": true,
+   "quelle_text": "Codex-Protokoll",
+   "woche_modell": []
+  }
+ },
+ "pausiert": false,
+ "pause_bis": null,
+ "letzter_tick": 1790447281.0,
+ "launchagent": true,
+ "ntfy_topic": true,
+ "orca_ok": true,
+ "orca_vorhanden": true,
+ "nur_orca": false,
+ "statusline": {
+  "zustand": "aktiv",
+  "stand": 1790447250.0
+ },
+ "nacht": 1790474400.0,
+ "nur_mit_nachtmodus": true,
+ "bericht_uhrzeit": "08:00",
+ "schwellen": {
+  "warnung": 80,
+  "stopp": 92,
+  "woche_warnung": 80,
+  "woche_stopp": 92,
+  "wochen_reserve": 20
+ },
+ "sitzungen": [
+  {
+   "anbieter": "claude",
+   "id": "11111111-2222-3333-4444-555555555555",
+   "cwd": "/Users/alex/Projects/demo-app",
+   "projekt": "demo-app",
+   "status": "aktiv",
+   "status_text": "aktiv",
+   "wartet": false,
+   "automatisch": false,
+   "zuletzt": 1790447000.0,
+   "nacht_bis": null,
+   "ort": "orca",
+   "ort_text": "Orca",
+   "faehigkeiten": {
+    "warnen": "ja",
+    "stoppen": "ja",
+    "fortsetzen": "ja"
+   },
+   "faehigkeiten_text": "warnt · stoppt · setzt fort",
+   "lage": "arbeitet",
+   "lage_text": "arbeitet",
+   "lage_farbe": "gruen",
+   "aktivitaet": {
+    "letzte": 1790447260.0,
+    "quelle": "transcript"
+   }
+  },
+  {
+   "anbieter": "claude",
+   "id": "66666666-7777-8888-9999-000000000000",
+   "cwd": "/Users/alex/Projects/website",
+   "projekt": "website",
+   "status": "gestoppt",
+   "status_text": "gestoppt",
+   "wartet": true,
+   "automatisch": true,
+   "zuletzt": 1790440000.0,
+   "fortsetzen_ab": 1790451120.0,
+   "nacht_bis": 1790488800.0,
+   "ort": "terminal",
+   "ort_text": "Terminal",
+   "faehigkeiten": {
+    "warnen": "ja",
+    "stoppen": "ja",
+    "fortsetzen": "push"
+   },
+   "faehigkeiten_text": "warnt · stoppt · nur Push",
+   "lage": "wartet",
+   "lage_text": "wartet bis 21:32",
+   "lage_farbe": "blau",
+   "aktivitaet": {
+    "letzte": 1790440000.0,
+    "quelle": "transcript"
+   }
+  },
+  {
+   "anbieter": "codex",
+   "id": "01a0da88-ad20-7542-b024-9d2ddfe7cc90",
+   "cwd": "/Users/alex/Projects/api",
+   "projekt": "api",
+   "status": "wartet_auf_weiter",
+   "status_text": "wartet auf „weiter“",
+   "zuletzt": 1790430000.0,
+   "nacht_bis": null,
+   "ort": "desktop",
+   "ort_text": "Desktop",
+   "faehigkeiten": {
+    "warnen": "ja",
+    "stoppen": "nein",
+    "fortsetzen": "push"
+   },
+   "faehigkeiten_text": "warnt · stoppt nicht · nur Push",
+   "lage": "weiter_noetig",
+   "lage_text": "„weiter“ nötig",
+   "lage_farbe": "orange",
+   "aktivitaet": {
+    "letzte": 1790430000.0,
+    "quelle": "rollout"
+   }
+  },
+  {
+   "anbieter": "claude",
+   "id": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+   "cwd": "/Users/alex/Projects/docs-site",
+   "projekt": "docs-site",
+   "status": "blockiert",
+   "status_text": "blockiert",
+   "wartet": false,
+   "automatisch": false,
+   "zuletzt": 1790444300.0,
+   "nacht_bis": null,
+   "ort": "orca",
+   "ort_text": "Orca",
+   "faehigkeiten": {
+    "warnen": "ja",
+    "stoppen": "ja",
+    "fortsetzen": "ja"
+   },
+   "faehigkeiten_text": "warnt · stoppt · setzt fort",
+   "lage": "blockiert",
+   "lage_text": "blockiert",
+   "lage_farbe": "rot",
+   "aktivitaet": {
+    "letzte": 1790444200.0,
+    "quelle": "transcript"
+   }
+  },
+  {
+   "anbieter": "claude",
+   "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+   "cwd": null,
+   "status": "beendet",
+   "status_text": "beendet",
+   "zuletzt": 1790200000.0,
+   "nacht_bis": null,
+   "lage": "beendet",
+   "lage_text": "beendet",
+   "lage_farbe": "grau",
+   "aktivitaet": {
+    "letzte": null,
+    "quelle": null
+   }
+  }
+ ],
+ "gesamt": {
+  "stufe": "warnung",
+  "text": "Claude: Warnung – 84 % (Reset 21:30)",
+  "detail": "Wartende Sitzungen laufen nach dem Reset automatisch weiter"
+ },
+ "offiziell": {
+  "claude": {
+   "zustand": "ok",
+   "fehler": null,
+   "stand": 1790447240.0
+  },
+  "codex": {
+   "zustand": "fehler",
+   "fehler": "auth",
+   "stand": null
+  }
+ },
+ "wach": {
+  "an": true,
+  "art": "amphetamine",
+  "modus": "automatisch",
+  "bis": 1790474400.0,
+  "sperre": "300",
+  "zugeklappt_ok": true,
+  "netzteil": true,
+  "amphetamine": "bereit",
+  "text": "Wach bis morgen 04:00 (Amphetamine, zugeklappt ok)"
+ }
+}

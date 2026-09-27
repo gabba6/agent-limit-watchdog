@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// Farben je Phase und das selbst gezeichnete Menüleistensymbol.
+// Farben je Phase/Stufe/Lage und das selbst gezeichnete Menüleistensymbol.
 
 enum Farben {
     static func phase(_ p: String) -> Color {
@@ -21,9 +21,55 @@ enum Farben {
         default: return .labelColor
         }
     }
+
+    /// Balkenfarbe nach Schwelle: grün < Warnung ≤ gelb < Stopp ≤ orange < 100 ≤ rot.
+    static func fuellung(_ pct: Double, warnung: Int, stopp: Int) -> Color {
+        if pct >= 100 { return .red }
+        if pct >= Double(stopp) { return .orange }
+        if pct >= Double(warnung) { return .yellow }
+        return .green
+    }
+
+    /// Gesamtstufe → Farbe und SF Symbol für das Statusbanner.
+    static func stufe(_ s: String) -> (farbe: Color, symbol: String) {
+        switch s {
+        case "wartet": return (.blue, "clock.fill")
+        case "warnung": return (.yellow, "exclamationmark.triangle.fill")
+        case "stopp": return (.orange, "hand.raised.fill")
+        case "limit": return (.red, "xmark.octagon.fill")
+        case "pause": return (.gray, "pause.circle.fill")
+        case "stoerung": return (.red, "bolt.horizontal.circle.fill")
+        default: return (.green, "checkmark.circle.fill")
+        }
+    }
+
+    /// Lage-Farbe aus status --json ("gruen", "blau", …).
+    static func lage(_ name: String) -> Color {
+        switch name {
+        case "gruen": return .green
+        case "gelb": return .yellow
+        case "blau": return .blue
+        case "orange": return .orange
+        case "rot": return .red
+        default: return .gray
+        }
+    }
+
+    static func anbieter(_ a: String) -> Color { a == "codex" ? .teal : .orange }
 }
 
 enum MenueSymbol {
+    /// Menüleistensymbol aus dem Status: Gesamtstufe bevorzugt, sonst höchste Phase.
+    static func bild(status st: Status?, startFehler: Bool) -> NSImage {
+        let h = st?.hoechsterFuenf ?? (pct: 0, phase: "ok")
+        var phase = h.phase
+        if let s = st?.gesamt?.stufe, ["ok", "warnung", "stopp", "limit"].contains(s) { phase = s }
+        let stufe = st?.stufe
+        return bild(pct: h.pct, phase: phase, nacht: st?.nacht != nil,
+                    pause: stufe == "pause" || st?.pausiert == true,
+                    stoerung: startFehler || stufe == "stoerung" || st?.launchagent == false)
+    }
+
     /// Ring mit Füllung = höchster 5h-Wert; Mond bei Nachtmodus, Striche bei Pause.
     /// Störung (Wächter aus, Python/waechter.py fehlt): gestrichelter Ring.
     static func bild(pct: Double, phase: String, nacht: Bool, pause: Bool, stoerung: Bool = false) -> NSImage {

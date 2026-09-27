@@ -13,7 +13,8 @@ struct Ergebnis {
 
 enum Befehle {
     static let python = "/usr/bin/python3"
-    static let zeitlimit: TimeInterval = 20
+    static let standardZeitlimit: TimeInterval = 20
+    static let wachZeitlimit: TimeInterval = 180
 
     static var projektPfad: String? {
         if let env = ProcessInfo.processInfo.environment["LIMIT_WAECHTER_PROJEKT"], !env.isEmpty { return env }
@@ -35,19 +36,19 @@ enum Befehle {
         return (home as NSString).appendingPathComponent("log/waechter.log")
     }
 
-    /// Führt waechter.py im Hintergrund aus (Timeout 20 s).
-    static func ausfuehren(_ argumente: [String]) async -> Ergebnis {
+    /// Führt waechter.py im Hintergrund aus (Standard-Timeout 20 s; "wach an/aus" wartet auf den Passwortdialog).
+    static func ausfuehren(_ argumente: [String], zeitlimit: TimeInterval = standardZeitlimit) async -> Ergebnis {
         guard let skript = skriptPfad, FileManager.default.fileExists(atPath: skript) else {
             return Ergebnis(code: -1, ausgabe: "", fehler: "", startFehler: skriptPfad ?? "waechter.py")
         }
         return await withCheckedContinuation { (fortsetzung: CheckedContinuation<Ergebnis, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
-                fortsetzung.resume(returning: synchron([skript] + argumente))
+                fortsetzung.resume(returning: synchron([skript] + argumente, zeitlimit: zeitlimit))
             }
         }
     }
 
-    private static func synchron(_ argumente: [String]) -> Ergebnis {
+    private static func synchron(_ argumente: [String], zeitlimit: TimeInterval) -> Ergebnis {
         let prozess = Process()
         prozess.executableURL = URL(fileURLWithPath: python)
         prozess.arguments = argumente
