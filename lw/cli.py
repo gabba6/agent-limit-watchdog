@@ -520,6 +520,99 @@ def main(argv=None):
 
 
 # ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+from . import nutzung  # noqa: E402
+
+STUFEN_GESAMT = ("ok", "warnung", "stopp", "limit")
+TICK_MAX_ALTER_S = 300
+
+
+def quelle_text(quelle):
+    schluessel = "nz_q_" + (quelle or "keine")
+    return t(schluessel) if schluessel in sprache.TEXTE else str(quelle)
+
+
+def _frisch(x, now):
+    return x.get("status") != "beendet" and now - (x.get("zuletzt") or 0) < 2 * 86400
+
+
+def gesamt(ausgabe, k, now, sitzungen):
+    """Gesamtzustand in einem Satz: {'stufe', 'text', 'detail'} (Reihenfolge: stoerung > pause > limit > stopp >
+    warnung > wartet > ok)."""
+    letzter = ausgabe.get("letzter_tick")
+    if not ausgabe.get("launchagent") or not letzter or now - letzter > TICK_MAX_ALTER_S:
+        if not ausgabe.get("launchagent"):
+            detail = t("nz_g_d_agent")
+        else:
+            detail = t("nz_g_d_tick", dauer=util.dauer_text(now - letzter)) if letzter else t("nz_g_d_kein_tick")
+        return {"stufe": "stoerung", "text": t("nz_g_stoerung"), "detail": detail}
+    if ausgabe.get("pausiert"):
+        bis = ausgabe.get("pause_bis")
+        return {"stufe": "pause", "text": t("nz_g_pause_bis", zeit=util.uhrzeit(bis, now)) if bis else t("nz_g_pause"),
+                "detail": None}
+    ph = ausgabe.get("phasen") or {}
+    orca_ok = ausgabe.get("orca_ok", True)
+    wartend = [x for x in sitzungen if _frisch(x, now)
+               and (x.get("status") in register.WARTET or x.get("status") == "wartet_auf_weiter")]
+    kandidaten = []
+    for anb in ("claude", "codex"):
+        p = ph.get(anb) or {}
+        if p.get("phase") in STUFEN_GESAMT[1:]:
+            kandidaten.append((STUFEN_GESAMT.index(p["phase"]), p.get("pct") or 0, anb))
+    if kandidaten:
+        _, _, anb = max(kandidaten)
+        p = ph[anb]
+        zeit = util.uhrzeit(p.get("reset"), now)
+        if p["phase"] == "warnung":
+            return {"stufe": "warnung", "text": t("nz_g_warnung", n=NAME[anb], pct=sprache.prozent(p.get("pct") or 0),
+                                                   zeit=zeit), "detail": None}
+        eigene = [x for x in wartend if x.get("anbieter") == anb and x.get("status") in register.WARTET]
+        auto = sum(1 for x in eigene if automatisch(x, k, now, orca_ok))
+        if auto:
+            detail = t("nz_g_d_auto", n=NAME[anb], anzahl=auto)
+        elif eigene:
+            detail = t("nz_g_d_hand", n=NAME[anb], anzahl=len(eigene))
+        else:
+            detail = t("nz_g_d_anbieter", n=NAME[anb], art=t("art_" + (p.get("art") or "fuenf")))
+        return {"stufe": p["phase"], "text": t("nz_g_" + p["phase"], zeit=zeit), "detail": detail}
+    if wartend:
+        naechste = [x["fortsetzen_ab"] for x in wartend if x.get("status") in register.WARTET
+                    and x.get("fortsetzen_ab") and automatisch(x, k, now, orca_ok)]
+        detail = t("nz_g_d_naechste", zeit=util.uhrzeit(max(min(naechste), now), now)) if naechste else None
+        return {"stufe": "wartet", "text": t("nz_g_wartet", anzahl=len(wartend)), "detail": detail}
+    return {"stufe": "ok", "text": t("nz_g_ok"), "detail": None}
+
+
+def _status_json_a(ausgabe, k, now, daten, sitzungen):
+    off = nutzung.lesen(k, now) if k["daten"].get("offiziell", True) else {"claude": None, "codex": None}
+    for anb, p in (ausgabe.get("phasen") or {}).items():
+        p["quelle_text"] = quelle_text(p.get("quelle") if p.get("hat_daten", True) else None)
+        p["woche_modell"] = list((off.get(anb) or {}).get("woche_modell") or []) if anb == "claude" else []
+    ausgabe["offiziell"] = daten.get("offiziell") or nutzung.info(k, now)
+    ausgabe["gesamt"] = gesamt(ausgabe, k, now, sitzungen)
+
+
+def _status_text_a(k, now, daten):
+    if not k["daten"].get("offiziell", True):
+        return [t("nz_st_aus")]
+    info = daten.get("offiziell") or nutzung.info(k, now)
+    zeilen = []
+    for anb in ("claude", "codex"):
+        d = daten.get(anb) or {}
+        if d.get("quelle") and d.get("stand"):
+            zeilen.append(t("nz_st_ok", n=NAME[anb], quelle=quelle_text(d["quelle"]),
+                            dauer=util.dauer_text(now - d["stand"])))
+        else:
+            zeilen.append(t("nz_st_keine", n=NAME[anb]))
+        i = info.get(anb) or {}
+        if i.get("zustand") == "fehler" and i.get("fehler"):
+            schluessel = "nz_f_" + i["fehler"]
+            zeilen.append(t("nz_st_fehler", n=NAME[anb],
+                            grund=t(schluessel) if schluessel in sprache.TEXTE else i["fehler"]))
+    return zeilen
+
+
+STATUS_JSON_ZUSATZ.append(_status_json_a)
+STATUS_TEXT_ZUSATZ.append(_status_text_a)
 
 # ======== v1.4 A Ende ========
 

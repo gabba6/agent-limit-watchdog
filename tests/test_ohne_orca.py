@@ -125,7 +125,7 @@ class OhneOrcaTest(TempHome):
                       self.now, dry_run=True)
         d = tick.daten_sammeln(ctx)
         self.assertEqual(d["claude"]["quelle"], "statusline")
-        self.assertEqual(d["claude_quellen"], {"orca": self.now - 120, "statusline": self.now - 10})
+        self.assertEqual(d["claude_quellen"], {"orca": self.now - 120, "statusline": self.now - 10, "offiziell": None})
 
     def test_orca_frischer_als_statusline(self):
         self._statusline(self.now - 300)

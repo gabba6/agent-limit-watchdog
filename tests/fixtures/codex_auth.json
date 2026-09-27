@@ -1,0 +1,4 @@
+{"OPENAI_API_KEY": null,
+ "tokens": {"id_token": "fake-id-nicht-echt", "access_token": "fake-codex-token-nicht-echt",
+            "refresh_token": "fake-refresh-nicht-echt", "account_id": "00000000-0000-4000-8000-000000000000"},
+ "last_refresh": "2026-09-27T08:00:00.000000Z"}

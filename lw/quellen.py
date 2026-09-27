@@ -395,3 +395,28 @@ def mac_status():
         "amphetamine": "Amphetamine" in ass,
         "wach_bei_deckel_zu": schlaf_aus or deckel_schlaeft is False,
     }
+
+
+# ---------------------------------------------------------------- v1.4 A: Zeitangaben mit Zone
+
+_ISO_ZONE = re.compile(r"^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d:\d\d)(\.\d+)?\s*(Z|z|[+-]\d\d:?\d\d)?$")
+
+
+def iso_zone_zu_epoch(text):
+    """'2026-09-27T18:00:00.27+00:00' / '…Z' / '…+02:00' -> Epoch (float). Ohne Zone: UTC. Unlesbar -> None."""
+    if not isinstance(text, str):
+        return None
+    m = _ISO_ZONE.match(text.strip())
+    if not m:
+        return None
+    try:
+        basis = calendar.timegm(time.strptime(m.group(1) + "T" + m.group(2), "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return None
+    wert = basis + (float("0" + m.group(3)) if m.group(3) else 0.0)
+    zone = m.group(4)
+    if zone and zone not in ("Z", "z"):
+        vz = -1 if zone[0] == "-" else 1
+        ziffern = zone[1:].replace(":", "")
+        wert -= vz * (int(ziffern[:2]) * 3600 + int(ziffern[2:]) * 60)
+    return wert

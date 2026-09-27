@@ -62,6 +62,18 @@ remote_modus_befehl = ""               # optional command shown in that warning,
 uhrzeit = "08:00"                      # only sent if something happened overnight; night mode ends at this time
 
 # ======== v1.4 A (Fuellstand) – nur zwischen diesen Zeilen einfuegen ========
+[daten]                                # official usage (same numbers as Claude Desktop / ChatGPT; read-only request,
+                                       # no model call; the login token is read at runtime and never stored or logged)
+offiziell = true                       # fetch the official usage; false = only Orca / status line / Codex log
+offiziell_intervall_minuten = 3        # how often to fetch
+offiziell_intervall_eng_minuten = 1    # during warning/stop/limit or when a continuation is due soon
+offiziell_max_alter_minuten = 10       # younger official data always wins over the other sources
+offiziell_timeout_sekunden = 8
+claude_usage_url = "https://api.anthropic.com/api/oauth/usage"
+codex_usage_url = "https://chatgpt.com/backend-api/wham/usage"
+claude_schluesselbund_dienst = "Claude Code-credentials"   # keychain item Claude Code created (read only)
+codex_auth = "~/.codex/auth.json"      # Codex login file (read only)
+frueh_reset_abfall = 20                # percentage points: a drop this large before the reset counts as an early reset
 
 # ======== v1.4 A Ende ========
 

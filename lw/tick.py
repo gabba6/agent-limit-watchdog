@@ -5,6 +5,7 @@ import time
 from . import bericht, codex, fortsetzen, nacht, orte, phasen, quellen, register, sprache, texte, util, wach
 from .sprache import t
 from .orca import OrcaFehler
+from . import nutzung  # v1.4 A
 
 ZUSTAND = ("state", "zustand.json")
 CURRENT = ("state", "current.json")
@@ -39,17 +40,87 @@ def daten_sammeln(ctx, sim=None, abrufen=True):
     roll = quellen.codex_nutzung(rollouts)
     d["rollouts"] = rollouts
     sl = quellen.claude_statusline(util.pfad(*quellen.STATUSLINE_DATEI))
-    d["claude"] = phasen.waehle_quelle(lim.get("claude"), sl)     # frischere gewinnt, Gleichstand: Orca
-    d["claude_quellen"] = {"orca": (lim.get("claude") or {}).get("stand"), "statusline": (sl or {}).get("stand")}
-    d["codex"] = phasen.waehle_quelle(lim.get("codex"), roll)
+    # v1.4 A: offizielle Nutzungsanzeige zuerst (gedrosselt abrufen; status liest nur den Zwischenspeicher)
+    off = {"claude": None, "codex": None}
+    if k["daten"].get("offiziell", True):
+        if abrufen and not util.offline():
+            nutzung.aktualisieren(k, util.lies_json(util.pfad(*ZUSTAND), {}) or {}, register.alle(), now)
+        off = nutzung.lesen(k, now)
+    max_alter = int(k["daten"].get("offiziell_max_alter_minuten", 10)) * 60
+    # offizielle Quelle hat Vorrang, sonst frischester Stand, Gleichstand: Orca
+    d["claude"] = phasen.waehle_quelle(off["claude"], lim.get("claude"), sl, now=now, max_alter_s=max_alter)
+    d["claude_quellen"] = {"orca": (lim.get("claude") or {}).get("stand"), "statusline": (sl or {}).get("stand"),
+                           "offiziell": (off["claude"] or {}).get("stand")}
+    d["codex"] = phasen.waehle_quelle(off["codex"], lim.get("codex"), roll, now=now, max_alter_s=max_alter)
+    d["offiziell"] = nutzung.info(k, now)
     d["codex_credits"] = (roll or {}).get("credits")
     d["codex_reset_credits"] = (lim.get("codex") or {}).get("reset_credits")
     return d
 
 
+FRUEH_VERTRAUT_S = 300          # statusline/rollout zählen fürs frühe Reset nur, wenn höchstens so alt
+
+
+def _frueh_vertraut(d, now):
+    """Nur verlässliche Quellen dürfen ein frühes Reset auslösen – nie Orca allein."""
+    q = (d or {}).get("quelle")
+    if q == "offiziell":
+        return True
+    return q in ("statusline", "rollout") and bool(d.get("stand")) and now - d["stand"] <= FRUEH_VERTRAUT_S
+
+
+def _kurz_nutzung(d):
+    f5, fw = d.get("fuenf") or {}, d.get("woche") or {}
+    return {"pct5": f5.get("pct"), "reset5": f5.get("reset"), "pctw": fw.get("pct"), "resetw": fw.get("reset"),
+            "quelle": d.get("quelle")}
+
+
 def _nach_daten(ctx, daten, zustand, sitzungen):
-    """v1.4 A: fruehes Reset erkennen. -> True, wenn Sitzungen geaendert wurden."""
-    return False
+    """v1.4 A: fruehes Reset erkennen. -> True, wenn Sitzungen geaendert wurden.
+
+    Anthropic/OpenAI setzen Fenster gelegentlich vorzeitig zurück. Fällt der Füllstand eines noch laufenden
+    Fensters deutlich oder rückt sein Reset nach vorn, werden wartende Sitzungen sofort fällig."""
+    k, now = ctx.k, ctx.now
+    abfall = k["daten"].get("frueh_reset_abfall", 20)
+    alt_alle = zustand.get("nutzung") or {}
+    neu_alle = {}
+    geaendert = False
+    for anb in ("claude", "codex"):
+        d = daten.get(anb)
+        alt = alt_alle.get(anb) or {}
+        if not d:
+            if alt:
+                neu_alle[anb] = alt
+            continue
+        neu = _kurz_nutzung(d)
+        neu_alle[anb] = neu
+        if not alt or not _frueh_vertraut(d, now):
+            continue
+        for art, pk, rk, stopp in (("fuenf", "pct5", "reset5", k["schwellen"]["stopp"]),
+                                   ("woche", "pctw", "resetw", k["schwellen"]["woche_stopp"])):
+            ar, nr, ap, np = alt.get(rk), neu.get(rk), alt.get(pk), neu.get(pk)
+            if not ar or ar <= now + 300:          # altes Fenster endet ohnehin gleich: normales Reset
+                continue
+            if nr is not None and nr <= now:       # neue Angabe schon abgelaufen: unbrauchbar
+                continue
+            vorgezogen = bool(nr) and nr < ar - 600
+            gefallen = ap is not None and np is not None and ap - np >= abfall and np < stopp
+            if not (vorgezogen or gefallen):
+                continue
+            for s in sitzungen:
+                if s.get("anbieter") == anb and s.get("status") in register.WARTET \
+                        and (s.get("art") or "fuenf") == art and (s.get("fortsetzen_ab") or 0) > now:
+                    def aenderung(x):
+                        x["fortsetzen_ab"] = now
+                        x["reset"] = now
+                    register.aktualisieren(anb, s["id"], aenderung, "fruehes Reset")
+                    geaendert = True
+            util.ereignis("fruehes_reset", anbieter=anb, art=art)
+            util.log(t("nz_log_frueh", n=texte.NAME[anb], art=t("art_" + art)))
+            ctx.melder.senden(t("nz_push_frueh", n=texte.NAME[anb], art=t("art_" + art)), prio=3,
+                              tags=["tada"], schluessel=f"frueh:{anb}:{art}:{int(ar)}")
+    zustand["nutzung"] = neu_alle
+    return geaendert
 
 
 def limit_hinweise(sitzungen, now):
