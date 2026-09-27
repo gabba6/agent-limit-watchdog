@@ -65,6 +65,18 @@ class ParserTest(TempHome):
                                                                             "cache_read_input_tokens": 450000}}}))
         self.assertEqual(kontextfenster.aus_transcript(groß)["fenster"], 1000000, "mehr als 200k -> 1M-Fenster")
 
+    def test_transcript_1m_aus_modell_anhang(self):
+        # echte Transcripts: message.model ohne [1m], die Fensterkennung steht nur im Modell-Anhang am Anfang
+        tr = os.path.join(self.home, "t1m.jsonl")
+        with open(tr, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "attachment", "attachment": {
+                "type": "model", "identity": {"modelId": "claude-opus-5-5[1m]"}}}, separators=(",", ":")) + "\n")
+            with open(fixture("transcript_kontext.jsonl"), encoding="utf-8") as q:
+                f.write(q.read())
+        e = kontextfenster.aus_transcript(tr)
+        self.assertEqual((e["tokens"], e["fenster"], e["prozent"]), (140020, 1000000, 14.0))
+        self.assertEqual(kontextfenster.modell_name("x", "Opus 5.5 (1M context)"), "Opus 5.5")
+
     def test_transcript_nach_compact(self):
         tr = os.path.join(self.home, "t.jsonl")
         shutil.copy(fixture("transcript_kontext.jsonl"), tr)
@@ -281,6 +293,7 @@ class StatusKontextTest(TempHome):
                                                 "modell": "Opus 5.5", "stufe": "warnung", "stand": self.now,
                                                 "quelle": "statusline"})
         self.assertIsNone(s["c-leer"]["kontext"])
+        self.assertEqual(s["c-kx"]["erstellt"], self.now, "Läuft seit (App)")
 
     def test_ruhende_sitzungen_nur_zwoelf_stunden(self):
         register.aktualisieren("claude", "c-neu", lambda d: d.update(cwd="/p/a", status="aktiv"))

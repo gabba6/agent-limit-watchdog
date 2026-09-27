@@ -884,7 +884,7 @@ TEXTE = {
     "st_kontext": {"de": " · Kontext {pct}", "en": " · context {pct}"},
     "st_kontext_schwellen": {"de": "Kontext: Warnung {w} %, kritisch {k} %",
                              "en": "Context: warning {w}%, critical {k}%"},
-    "fs_lage_nativ": {"de": "Claude setzt ab {zeit} selbst fort", "en": "Claude continues at {zeit} by itself"},
+    "fs_lage_nativ": {"de": "setzt {zeit} selbst fort", "en": "resumes at {zeit}"},
     "app_kontext": {"de": "Kontext", "en": "Context"},
     "app_kontext_leer": {"de": "–", "en": "–"},
     "app_kontext_tokens": {"de": "{tokens} / {fenster}", "en": "{tokens} / {fenster}"},

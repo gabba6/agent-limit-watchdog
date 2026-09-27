@@ -21,6 +21,7 @@ from . import util
 STANDARD_FENSTER = 200_000
 EINE_MIO = 1_000_000
 SCHWANZ_BYTES = 262_144
+KOPF_BYTES = 262_144
 VERLAUF_MAX = 20
 STUFEN = ("ok", "warnung", "kritisch")
 DROSSEL_S = 20
@@ -39,7 +40,8 @@ def fenster_aus_modell(modell_id, standard=STANDARD_FENSTER):
 def modell_name(modell_id=None, anzeige=None):
     """Kurzer Anzeigename: display_name mit Version, sonst aus der ID ("claude-opus-5-5[1m]" -> "Opus 5.5")."""
     if isinstance(anzeige, str) and re.search(r"\d", anzeige):
-        return anzeige.strip()[:40]
+        kurz = re.sub(r"\s*\([^)]*\)\s*$", "", anzeige.strip())     # "Opus 5.5 (1M context)" -> "Opus 5.5"
+        return (kurz or anzeige.strip())[:40]
     mid = EINS_M.sub("", str(modell_id or "")).strip()
     m = re.match(r"claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?!\d)", mid, re.IGNORECASE)
     if m:
@@ -87,13 +89,46 @@ def aus_statusline(daten, now, standard=STANDARD_FENSTER):
     return _eintrag(tokens, fenster, modell_name(mid, modell.get("display_name")), "statusline", now)
 
 
+def _kopf(pfad, max_bytes=KOPF_BYTES):
+    """Die ersten Zeilen einer JSONL-Datei (letzte, evtl. abgeschnittene Zeile verworfen)."""
+    try:
+        with open(pfad, "rb") as f:
+            daten = f.read(max_bytes)
+    except OSError:
+        return []
+    zeilen = daten.decode("utf-8", "replace").splitlines()
+    return zeilen[:-1] if len(daten) >= max_bytes and zeilen else zeilen
+
+
+def _modell_anhang(zeilen):
+    """Letzte Modellangabe des Transcripts (attachment type=model, identity.modelId, z. B. "claude-opus-5-5[1m]").
+    Die assistant-Einträge nennen nur "claude-opus-5-5" ohne Fensterkennung."""
+    for zeile in reversed(zeilen):
+        if '"type":"model"' not in zeile.replace(" ", ""):
+            continue
+        try:
+            e = json.loads(zeile)
+        except ValueError:
+            continue
+        a = e.get("attachment") if isinstance(e, dict) and isinstance(e.get("attachment"), dict) else {}
+        ident = a.get("identity") if isinstance(a.get("identity"), dict) else {}
+        if a.get("type") == "model" and isinstance(ident.get("modelId"), str):
+            return ident["modelId"]
+    return None
+
+
 def aus_transcript(pfad, standard=STANDARD_FENSTER, fenster_hinweis=None):
     """Claude-Transcript (nur das Ende) -> Eintrag oder None."""
     if not pfad or not os.path.isfile(pfad):
         return None
     from . import quellen            # spät: die Statusline braucht quellen nur in diesem Ersatzfall
     kompakt_ts = None
-    for zeile in reversed(quellen.lies_schwanz(pfad, SCHWANZ_BYTES)):
+    schwanz = quellen.lies_schwanz(pfad, SCHWANZ_BYTES)
+    if not fenster_hinweis:          # [1m] steht nur in der Modellangabe (Anhang), nicht in message.model
+        anhang = _modell_anhang(schwanz) or _modell_anhang(_kopf(pfad))
+        if anhang and fenster_aus_modell(anhang, standard) == EINE_MIO:
+            fenster_hinweis = EINE_MIO
+    for zeile in reversed(schwanz):
         try:
             e = json.loads(zeile)
         except ValueError:
@@ -148,6 +183,18 @@ def aus_rollout(pfad):
             break
     if not zaehler:
         return None
+    if modell is None:               # langer Turn: turn_context steht nur weiter vorn
+        for zeile in reversed(_kopf(pfad)):
+            if '"turn_context"' not in zeile:
+                continue
+            try:
+                e = json.loads(zeile)
+            except ValueError:
+                continue
+            p = e.get("payload") if isinstance(e, dict) and isinstance(e.get("payload"), dict) else {}
+            if e.get("type") == "turn_context" and isinstance(p.get("model"), str):
+                modell = p["model"]
+                break
     info, ts = zaehler
     last = info.get("last_token_usage") if isinstance(info.get("last_token_usage"), dict) else {}
     tokens, fenster = _zahl(last.get("total_tokens")), _zahl(info.get("model_context_window"))

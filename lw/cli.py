@@ -802,6 +802,8 @@ def _sitzung_json_kontext(eintrag, x, k, now):
         eintrag["kontext"] = kontextfenster.ermitteln(x, k, _ROLLOUT_INDEX.get("index"))
     except (OSError, ValueError, TypeError, KeyError):
         eintrag["kontext"] = None
+    erstellt = x.get("erstellt")                 # "Läuft seit" in der App (erste Meldung der Sitzung)
+    eintrag["erstellt"] = erstellt if isinstance(erstellt, (int, float)) and not isinstance(erstellt, bool) else None
     if nativ(x, k) and eintrag.get("lage") == "wartet" and x.get("fortsetzen_ab"):
         eintrag["lage_text"] = t("fs_lage_nativ", zeit=util.uhrzeit(x["fortsetzen_ab"], now))
 
